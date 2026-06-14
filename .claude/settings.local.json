@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(if \\(-not \\(Test-Path database\\\\database.sqlite\\)\\) { New-Item -ItemType File database\\\\database.sqlite | Out-Null; \"created database.sqlite\" } else { \"database.sqlite already exists\" }; php artisan migrate --force)",
+      "PowerShell(php artisan migrate --force)"
+    ]
+  }
+}
