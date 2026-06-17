@@ -11,17 +11,17 @@
     <div>
       <div class="font-semibold mb-3 text-sm">Clinic</div>
       <ul class="space-y-2 text-sm text-gray-500">
-        <li><a href="/about" class="hover:text-black">About</a></li>
-        <li><a href="/services" class="hover:text-black">Services</a></li>
-        <li><a href="/contact" class="hover:text-black">Contact</a></li>
+        <li><a href="{{ route('about') }}" class="hover:text-black">About</a></li>
+        <li><a href="{{ route('services') }}" class="hover:text-black">Services</a></li>
+        <li><a href="{{ route('contact') }}" class="hover:text-black">Contact</a></li>
       </ul>
     </div>
 
     <div>
       <div class="font-semibold mb-3 text-sm">Patients</div>
       <ul class="space-y-2 text-sm text-gray-500">
-        <li><a href="/auth?mode=signup" class="hover:text-black">Book online</a></li>
-        <li><a href="/auth" class="hover:text-black">Patient portal</a></li>
+        <li><a href="{{ route('register') }}" class="hover:text-black">Book online</a></li>
+        <li><a href="{{ route('login') }}" class="hover:text-black">Patient portal</a></li>
       </ul>
     </div>
 
