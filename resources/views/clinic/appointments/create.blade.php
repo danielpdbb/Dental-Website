@@ -5,7 +5,7 @@
 
 @section('content')
     <div class="max-w-2xl rounded-2xl bg-white border border-slate-200/60 p-6 md:p-8 shadow-soft">
-        <form method="POST" action="{{ route('clinic.appointments.store') }}" class="space-y-4">
+        <form method="POST" action="{{ route('clinic.appointments.store') }}" class="space-y-4" data-review="Create this appointment?">
             @csrf
 
             <label class="flex items-center gap-2 text-sm font-medium text-slate-700">

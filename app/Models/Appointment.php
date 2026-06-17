@@ -3,16 +3,17 @@
 namespace App\Models;
 
 use App\Enums\AppointmentStatus;
+use App\Enums\PaymentStatus;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 #[Fillable([
     'patient_id', 'dentist_id', 'service_id', 'scheduled_at', 'duration_minutes',
-    'status', 'is_walk_in', 'notes', 'created_by', 'cancelled_by', 'cancelled_at',
-    'cancellation_reason',
+    'total_amount', 'status', 'is_walk_in', 'notes', 'created_by', 'cancelled_by',
+    'cancelled_at', 'cancellation_reason',
 ])]
 class Appointment extends Model
 {
@@ -24,6 +25,7 @@ class Appointment extends Model
             'status' => AppointmentStatus::class,
             'is_walk_in' => 'boolean',
             'duration_minutes' => 'integer',
+            'total_amount' => 'decimal:2',
         ];
     }
 
@@ -42,9 +44,32 @@ class Appointment extends Model
         return $this->belongsTo(Service::class);
     }
 
-    public function payment(): HasOne
+    public function payments(): HasMany
     {
-        return $this->hasOne(Payment::class);
+        return $this->hasMany(Payment::class)->latest();
+    }
+
+    /**
+     * Total successfully collected for this appointment.
+     */
+    public function amountPaid(): float
+    {
+        return (float) $this->payments
+            ->where('status', PaymentStatus::Paid)
+            ->sum('amount');
+    }
+
+    /**
+     * Remaining balance = charge − collected (never negative).
+     */
+    public function balance(): float
+    {
+        return max(0, (float) $this->total_amount - $this->amountPaid());
+    }
+
+    public function isFullyPaid(): bool
+    {
+        return $this->balance() <= 0 && $this->total_amount > 0;
     }
 
     public function creator(): BelongsTo

@@ -5,7 +5,7 @@
 
 @section('content')
     <div class="max-w-3xl rounded-2xl bg-white border border-slate-200/60 p-6 md:p-8 shadow-soft">
-        <form method="POST" action="{{ route('clinic.patients.update', $patient) }}">
+        <form method="POST" action="{{ route('clinic.patients.update', $patient) }}" data-review="Save changes to this patient?">
             @csrf
             @method('PUT')
             @include('clinic.patients.form', ['patient' => $patient])

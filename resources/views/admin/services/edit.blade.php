@@ -5,7 +5,7 @@
 
 @section('content')
     <div class="max-w-2xl rounded-2xl bg-white border border-slate-200/60 p-6 md:p-8 shadow-soft">
-        <form method="POST" action="{{ route('admin.services.update', $service) }}">
+        <form method="POST" action="{{ route('admin.services.update', $service) }}" data-review="Save changes to this service?">
             @csrf
             @method('PUT')
             @include('admin.services.form', ['service' => $service])

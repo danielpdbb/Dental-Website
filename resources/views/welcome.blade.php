@@ -135,12 +135,21 @@
     <!-- CTA -->
     <section class="container mx-auto px-6 py-16">
         <div class="rounded-3xl gradient-brand p-12 text-center text-white shadow-brand">
-            <h3 class="font-display text-3xl md:text-4xl font-bold">Ready for your next visit?</h3>
-            <p class="mt-3 text-white/90">Sign up in seconds and book your appointment online.</p>
-            <a href="{{ route('register') }}"
-                class="inline-block mt-6 h-12 px-8 rounded-xl bg-white text-brand-navy font-semibold leading-[3rem] hover:bg-white/90 transition shadow">
-                Create your patient account
-            </a>
+            @auth
+                <h3 class="font-display text-3xl md:text-4xl font-bold">Ready for your next visit?</h3>
+                <p class="mt-3 text-white/90">Go to your dashboard to book appointments, view records, and manage your account.</p>
+                <a href="{{ auth()->user()->canManageUsers() ? route('admin.dashboard') : route('dashboard') }}"
+                    class="inline-block mt-6 h-12 px-8 rounded-xl bg-white text-brand-navy font-semibold leading-[3rem] hover:bg-white/90 transition shadow">
+                    Go to dashboard
+                </a>
+            @else
+                <h3 class="font-display text-3xl md:text-4xl font-bold">Ready for your next visit?</h3>
+                <p class="mt-3 text-white/90">Sign up in seconds and book your appointment online.</p>
+                <a href="{{ route('register') }}"
+                    class="inline-block mt-6 h-12 px-8 rounded-xl bg-white text-brand-navy font-semibold leading-[3rem] hover:bg-white/90 transition shadow">
+                    Create your patient account
+                </a>
+            @endauth
         </div>
     </section>
 @endsection

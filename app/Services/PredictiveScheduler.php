@@ -58,6 +58,35 @@ class PredictiveScheduler
     }
 
     /**
+     * Every slot for a given day with an availability flag — for the booking grid.
+     * Returns an empty collection if the clinic is closed that day.
+     *
+     * @return Collection<int, array{time: Carbon, available: bool}>
+     */
+    public function daySlots(User $dentist, int $durationMinutes, Carbon $date): Collection
+    {
+        $slots = collect();
+
+        if (! in_array($date->isoWeekday(), config('clinic.open_days'), true)) {
+            return $slots;
+        }
+
+        $open = $date->copy()->setTimeFromTimeString(config('clinic.open_time'));
+        $close = $date->copy()->setTimeFromTimeString(config('clinic.close_time'));
+        $step = (int) config('clinic.slot_minutes');
+
+        for ($cursor = $open->copy(); $cursor->copy()->addMinutes($durationMinutes)->lte($close); $cursor->addMinutes($step)) {
+            $start = $cursor->copy();
+            $slots->push([
+                'time' => $start,
+                'available' => $start->isFuture() && $this->isSlotAvailable($dentist, $start, $durationMinutes),
+            ]);
+        }
+
+        return $slots;
+    }
+
+    /**
      * Is a specific start time free for this dentist?
      */
     public function isSlotAvailable(User $dentist, Carbon $start, int $durationMinutes, ?int $ignoreAppointmentId = null): bool

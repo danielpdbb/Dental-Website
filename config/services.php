@@ -35,4 +35,13 @@ return [
         ],
     ],
 
+    'paymongo' => [
+        'public_key' => env('PAYMONGO_PUBLIC_KEY'),
+        'secret_key' => env('PAYMONGO_SECRET_KEY'),
+        'webhook_secret' => env('PAYMONGO_WEBHOOK_SECRET'),
+        // Payment methods offered on the hosted checkout (must be enabled in your
+        // PayMongo dashboard). card + gcash are available by default in test mode.
+        'methods' => ['card', 'gcash'],
+    ],
+
 ];

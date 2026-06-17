@@ -28,6 +28,18 @@
     </script>
     <style>
         .gradient-brand { background: linear-gradient(135deg, #3B82F6 0%, #10B981 100%); }
+        /* Prettier native dropdowns: custom chevron + spacing */
+        select:not([multiple]) {
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2364748b' stroke-width='2'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 0.75rem center;
+            background-size: 1.1rem;
+            padding-right: 2.5rem;
+            cursor: pointer;
+        }
     </style>
     @stack('styles')
 </head>
@@ -36,11 +48,13 @@
     @php
         $role = auth()->user()->role->value;
         $isMgmt = $role === 'management';
+        $isDentist = $role === 'dentist';
         $canDesk = in_array($role, ['management', 'receptionist']); // appointments, referrals, scheduling
 
         // [label, route name, active-pattern, visible?]
         $links = array_filter([
             ['Dashboard', 'admin.dashboard', 'admin.dashboard', $isMgmt],
+            ['My schedule', 'clinic.my-schedule', 'clinic.my-schedule', $isDentist || $isMgmt],
             ['Appointments', 'clinic.appointments.index', 'clinic.appointments.*', $canDesk],
             ['Patients', 'clinic.patients.index', 'clinic.patients.*', true],
             ['Scheduling', 'clinic.scheduling', 'clinic.scheduling', $canDesk],
@@ -82,8 +96,10 @@
             <header class="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6">
                 <h1 class="font-display text-lg font-bold">@yield('heading', 'Dashboard')</h1>
                 <div class="flex items-center gap-4">
-                    <span class="text-sm text-slate-500 hidden sm:block">{{ auth()->user()->name }}
-                        <span class="text-slate-300">·</span> {{ auth()->user()->role->label() }}</span>
+                    <a href="{{ route('profile.edit') }}" class="flex items-center gap-2 hover:opacity-80 transition" title="My profile">
+                        @include('partials.avatar', ['user' => auth()->user(), 'size' => 'h-8 w-8 text-xs'])
+                        <span class="text-sm text-slate-600 hidden sm:block">{{ auth()->user()->name }}</span>
+                    </a>
                     <form method="POST" action="{{ route('logout') }}">
                         @csrf
                         <button type="submit" class="text-sm font-medium text-slate-600 hover:text-red-500 transition">Log out</button>
@@ -92,12 +108,6 @@
             </header>
 
             <main class="flex-1 p-6">
-                @if (session('status'))
-                    <div class="mb-5 rounded-xl border border-brand-green/30 bg-brand-green/10 text-emerald-800 px-4 py-3 text-sm">
-                        {{ session('status') }}
-                    </div>
-                @endif
-
                 @if ($errors->any())
                     <div class="mb-5 rounded-xl border border-red-200 bg-red-50 text-red-600 px-4 py-3 text-sm">
                         <ul class="list-disc pl-5 space-y-0.5">
@@ -112,6 +122,11 @@
             </main>
         </div>
     </div>
+
+    @include('partials.toast')
+    @include('partials.confirm-modal')
+    @include('partials.review-modal')
+    @include('partials.select')
 
     @stack('scripts')
 </body>

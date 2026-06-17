@@ -65,15 +65,30 @@ class UserController extends Controller
     {
         $this->authorize('update', $user);
 
+        // For patients, load their full profile so the clinic can review (not edit) it.
+        $patient = $user->role === UserRole::Patient
+            ? $user->patient()->with(['allergies', 'appointments.payments'])->first()
+            : null;
+
         return view('admin.users.edit', [
             'user' => $user,
             'roles' => UserRole::options(),
+            'patient' => $patient,
         ]);
     }
 
     public function update(UpdateUserRequest $request, User $user): RedirectResponse
     {
         $data = $request->validated();
+
+        // Patients: only the account status may be changed here.
+        if ($user->role === UserRole::Patient) {
+            $user->update(['is_active' => $data['is_active']]);
+
+            return redirect()
+                ->route('admin.users.index')
+                ->with('status', 'Patient status updated.');
+        }
 
         // Don't overwrite the password unless a new one was supplied.
         if (empty($data['password'])) {

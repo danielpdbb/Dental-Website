@@ -38,52 +38,73 @@
                         @csrf
                         <button class="h-9 px-4 rounded-lg bg-red-50 text-red-600 text-sm font-medium hover:bg-red-100 transition">Mark no-show</button>
                     </form>
-                    <form method="POST" action="{{ route('clinic.appointments.cancel', $appointment) }}" onsubmit="return confirm('Cancel this appointment?');" class="flex gap-2">
+                    <form method="POST" action="{{ route('clinic.appointments.cancel', $appointment) }}" data-confirm="Cancel this appointment?" class="flex gap-2">
                         @csrf
                         <input type="text" name="reason" placeholder="Reason (optional)" class="h-9 px-3 rounded-lg border border-slate-200 text-sm outline-none focus:border-brand-blue" />
                         <button class="h-9 px-4 rounded-lg border border-slate-200 text-slate-600 text-sm font-medium hover:bg-slate-50 transition">Cancel appointment</button>
                     </form>
                 </div>
+                <form method="POST" action="{{ route('clinic.appointments.reschedule', $appointment) }}" class="mt-3 flex flex-wrap items-end gap-2">
+                    @csrf
+                    @method('PUT')
+                    <div>
+                        <label class="block text-xs text-slate-500 mb-1">Reschedule to</label>
+                        <input type="datetime-local" name="scheduled_at" value="{{ $appointment->scheduled_at->format('Y-m-d\TH:i') }}"
+                            class="h-9 px-3 rounded-lg border border-slate-200 text-sm outline-none focus:border-brand-blue" />
+                    </div>
+                    <button class="h-9 px-4 rounded-lg bg-slate-800 text-white text-sm font-medium hover:bg-slate-700 transition">Reschedule</button>
+                </form>
             @endif
         </div>
 
-        <!-- Payment -->
+        <!-- Billing -->
         <div class="rounded-2xl bg-white border border-slate-200/60 p-6 shadow-soft">
-            <h3 class="font-display text-lg font-bold">Payment</h3>
-            @if ($appointment->payment)
-                <div class="mt-3 text-sm space-y-1">
-                    <div class="text-2xl font-display font-bold">₱{{ number_format($appointment->payment->amount, 2) }}</div>
-                    <div><span class="px-2.5 py-0.5 rounded-full text-xs font-medium {{ $appointment->payment->status->badgeClasses() }}">{{ $appointment->payment->status->label() }}</span> · {{ $appointment->payment->method->label() }}</div>
-                    @if ($appointment->payment->paid_at)<div class="text-xs text-slate-400">Paid {{ $appointment->payment->paid_at->format('M j, Y') }}</div>@endif
+            <h3 class="font-display text-lg font-bold">Billing</h3>
+
+            <div class="mt-3 space-y-1 text-sm">
+                <div class="flex justify-between"><span class="text-slate-500">Charge</span><span class="font-medium">₱{{ number_format($appointment->total_amount, 2) }}</span></div>
+                <div class="flex justify-between"><span class="text-slate-500">Paid</span><span class="font-medium text-emerald-600">₱{{ number_format($appointment->amountPaid(), 2) }}</span></div>
+                <div class="flex justify-between border-t border-slate-100 pt-1.5 mt-1">
+                    <span class="text-slate-500">Balance</span>
+                    <span class="font-display font-bold {{ $appointment->balance() > 0 ? 'text-red-500' : 'text-emerald-600' }}">₱{{ number_format($appointment->balance(), 2) }}</span>
                 </div>
-            @else
-                <p class="mt-2 text-sm text-slate-400">No payment recorded.</p>
+            </div>
+
+            @if ($appointment->payments->isNotEmpty())
+                <div class="mt-4">
+                    <div class="text-xs uppercase tracking-wider text-slate-400 mb-1">Payment history</div>
+                    @foreach ($appointment->payments as $payment)
+                        <div class="flex items-center justify-between text-xs border-b border-slate-100 py-1.5">
+                            <span>₱{{ number_format($payment->amount, 2) }} · {{ $payment->method->label() }}
+                                @if ($payment->paid_at)<span class="text-slate-400">{{ $payment->paid_at->format('M j') }}</span>@endif
+                            </span>
+                            <span class="px-2 py-0.5 rounded-full font-medium {{ $payment->status->badgeClasses() }}">{{ $payment->status->label() }}</span>
+                        </div>
+                    @endforeach
+                </div>
             @endif
 
-            <form method="POST" action="{{ route('clinic.appointments.payment.store', $appointment) }}" class="mt-4 space-y-3">
-                @csrf
-                <div>
-                    <label class="block text-xs font-medium text-slate-500 mb-1">Amount (₱)</label>
-                    <input type="number" step="0.01" name="amount" value="{{ old('amount', $appointment->payment->amount ?? $appointment->service?->price) }}" required class="w-full h-10 px-3 rounded-lg border border-slate-200 text-sm outline-none focus:border-brand-blue" />
-                </div>
-                <div>
-                    <label class="block text-xs font-medium text-slate-500 mb-1">Method</label>
-                    <select name="method" class="w-full h-10 px-3 rounded-lg border border-slate-200 text-sm outline-none focus:border-brand-blue">
-                        @foreach ($methods as $val => $lbl)
-                            <option value="{{ $val }}" @selected(optional($appointment->payment)->method?->value === $val)>{{ $lbl }}</option>
-                        @endforeach
-                    </select>
-                </div>
-                <div>
-                    <label class="block text-xs font-medium text-slate-500 mb-1">Status</label>
-                    <select name="status" class="w-full h-10 px-3 rounded-lg border border-slate-200 text-sm outline-none focus:border-brand-blue">
-                        @foreach ($paymentStatuses as $val => $lbl)
-                            <option value="{{ $val }}" @selected(optional($appointment->payment)->status?->value === $val)>{{ $lbl }}</option>
-                        @endforeach
-                    </select>
-                </div>
-                <button class="w-full h-10 rounded-lg gradient-brand text-white text-sm font-semibold hover:opacity-90 transition">Save payment</button>
-            </form>
+            @if ($appointment->balance() > 0)
+                <form method="POST" action="{{ route('clinic.appointments.payment.store', $appointment) }}" class="mt-4 space-y-3">
+                    @csrf
+                    <div>
+                        <label class="block text-xs font-medium text-slate-500 mb-1">Amount (₱) — partial allowed</label>
+                        <input type="number" step="0.01" name="amount" value="{{ old('amount', number_format($appointment->balance(), 2, '.', '')) }}" required class="w-full h-10 px-3 rounded-lg border border-slate-200 text-sm outline-none focus:border-brand-blue" />
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-slate-500 mb-1">Method</label>
+                        <select name="method" class="w-full h-10 px-3 rounded-lg border border-slate-200 text-sm outline-none focus:border-brand-blue">
+                            @foreach ($methods as $val => $lbl)
+                                <option value="{{ $val }}">{{ $lbl }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <input type="hidden" name="status" value="paid" />
+                    <button class="w-full h-10 rounded-lg gradient-brand text-white text-sm font-semibold hover:opacity-90 transition">Record payment</button>
+                </form>
+            @else
+                <p class="mt-4 text-sm font-medium text-emerald-600">✓ Fully paid</p>
+            @endif
         </div>
     </div>
 @endsection

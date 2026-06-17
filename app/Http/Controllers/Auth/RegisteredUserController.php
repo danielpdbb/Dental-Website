@@ -9,6 +9,7 @@ use App\Models\User;
 use Illuminate\Auth\Events\Registered;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Str;
 use Illuminate\View\View;
 
 class RegisteredUserController extends Controller
@@ -26,14 +27,28 @@ class RegisteredUserController extends Controller
      */
     public function store(RegisterRequest $request): RedirectResponse
     {
+        $name = $request->validated('name');
+
         $user = User::create([
-            'name' => $request->validated('name'),
+            'name' => $name,
             'username' => $request->validated('username'),
             'email' => $request->validated('email'),
             'password' => $request->validated('password'),
             // Public sign-ups are always patients, and start unverified.
             'role' => UserRole::Patient,
             'is_active' => true,
+            // Stamp the moment they accepted the Data Privacy Act consent.
+            'data_privacy_consent_at' => now(),
+        ]);
+
+        // Create their patient record with the details collected at sign-up.
+        $user->patient()->create([
+            'first_name' => Str::before($name, ' ') ?: $name,
+            'last_name' => Str::contains($name, ' ') ? Str::after($name, ' ') : '',
+            'phone' => $request->validated('mobile'),
+            'gender' => $request->validated('gender'),
+            'date_of_birth' => $request->validated('date_of_birth'),
+            'address' => $request->validated('address'),
         ]);
 
         // Fires the listener that emails the verification link.

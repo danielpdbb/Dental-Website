@@ -7,47 +7,93 @@
         @include('partials.portal-nav')
 
         <h1 class="font-display text-3xl font-bold">Book an appointment</h1>
-        <p class="text-sm text-slate-500 mt-1">Clinic hours: Mon–Sat, {{ config('clinic.open_time') }}–{{ config('clinic.close_time') }}.</p>
+        <p class="text-sm text-slate-500 mt-1">Clinic hours: Mon–Sat, {{ \Illuminate\Support\Carbon::parse(config('clinic.open_time'))->format('g:i A') }}–{{ \Illuminate\Support\Carbon::parse(config('clinic.close_time'))->format('g:i A') }}.</p>
 
-        <div class="mt-6 rounded-2xl bg-white border border-slate-200/60 p-6 md:p-8 shadow-soft">
-            <form method="POST" action="{{ route('portal.appointments.store') }}" class="space-y-4">
+        {{-- Step 1: choose service, dentist and date (reloads to show times) --}}
+        <div class="mt-6 rounded-2xl bg-white border border-slate-200/60 p-6 shadow-soft">
+            <form method="GET" action="{{ route('portal.appointments.create') }}" class="grid sm:grid-cols-2 gap-3">
+                <div class="sm:col-span-2">
+                    <label for="service_id" class="block text-xs font-medium text-slate-500 mb-1">Service</label>
+                    <select id="service_id" name="service_id" onchange="this.form.submit()" class="w-full h-11 px-3 rounded-xl border border-slate-200 outline-none focus:border-brand-blue">
+                        <option value="">Select…</option>
+                        @foreach ($services as $s)
+                            <option value="{{ $s->id }}" @selected($service?->id === $s->id)>{{ $s->name }} — ₱{{ number_format($s->price, 2) }}</option>
+                        @endforeach
+                    </select>
+                </div>
+                <div>
+                    <label for="dentist_id" class="block text-xs font-medium text-slate-500 mb-1">Dentist</label>
+                    <select id="dentist_id" name="dentist_id" onchange="this.form.submit()" class="w-full h-11 px-3 rounded-xl border border-slate-200 outline-none focus:border-brand-blue">
+                        <option value="">Select…</option>
+                        @foreach ($dentists as $d)
+                            <option value="{{ $d->id }}" @selected($dentist?->id === $d->id)>{{ $d->name }}</option>
+                        @endforeach
+                    </select>
+                </div>
+                <div>
+                    <label for="date" class="block text-xs font-medium text-slate-500 mb-1">Date</label>
+                    <input id="date" type="date" name="date" value="{{ $date->toDateString() }}" min="{{ now()->toDateString() }}" onchange="this.form.submit()" class="w-full h-11 px-3 rounded-xl border border-slate-200 outline-none focus:border-brand-blue" />
+                </div>
+            </form>
+        </div>
+
+        {{-- Step 2: pick a time tile --}}
+        @if (is_null($slots))
+            <p class="mt-6 text-sm text-slate-400">Select a service, dentist and date above to see available times.</p>
+        @elseif ($slots->isEmpty())
+            <div class="mt-6 rounded-2xl border border-slate-200/60 bg-white p-6 shadow-soft text-sm text-slate-500">
+                The clinic is closed on {{ $date->format('l, M j') }}. Please choose another date (Mon–Sat).
+            </div>
+        @else
+            <form method="POST" action="{{ route('portal.appointments.store') }}" class="mt-6" data-review="Confirm this booking?">
                 @csrf
-                <div>
-                    <label for="service_id" class="block text-sm font-medium text-slate-700 mb-1">Service</label>
-                    <select id="service_id" name="service_id" required class="w-full h-11 px-3 rounded-xl border @error('service_id') border-red-400 @else border-slate-200 @enderror outline-none focus:border-brand-blue">
-                        <option value="">— Select a service —</option>
-                        @foreach ($services as $service)
-                            <option value="{{ $service->id }}" @selected((string) old('service_id') === (string) $service->id)>{{ $service->name }} — ₱{{ number_format($service->price) }} ({{ $service->duration_minutes }} min)</option>
+                <input type="hidden" name="service_id" value="{{ $service->id }}" />
+                <input type="hidden" name="dentist_id" value="{{ $dentist->id }}" />
+
+                {{-- readonly fields so the review modal can show context --}}
+                <div class="grid sm:grid-cols-2 gap-3">
+                    <div>
+                        <label for="display_service" class="block text-xs font-medium text-slate-500 mb-1">Service</label>
+                        <input id="display_service" name="display_service" type="text" value="{{ $service->name }} (₱{{ number_format($service->price, 2) }})" readonly class="w-full h-11 px-3 rounded-xl border border-slate-200 bg-slate-50 text-slate-600" />
+                    </div>
+                    <div>
+                        <label for="display_dentist" class="block text-xs font-medium text-slate-500 mb-1">Dentist</label>
+                        <input id="display_dentist" name="display_dentist" type="text" value="{{ $dentist->name }}" readonly class="w-full h-11 px-3 rounded-xl border border-slate-200 bg-slate-50 text-slate-600" />
+                    </div>
+                </div>
+
+                <div class="mt-5">
+                    <div class="text-sm font-medium text-slate-700 mb-2">Available times on {{ $date->format('l, M j') }}</div>
+                    @error('scheduled_at') <p class="mb-2 text-xs text-red-500">{{ $message }}</p> @enderror
+                    <div class="grid grid-cols-3 sm:grid-cols-4 gap-2.5">
+                        @foreach ($slots as $slot)
+                            @if ($slot['available'])
+                                <label class="cursor-pointer">
+                                    <input type="radio" name="scheduled_at" value="{{ $slot['time']->format('Y-m-d\TH:i') }}" data-display="{{ $slot['time']->format('M j, Y · g:i A') }}" class="peer sr-only" required />
+                                    <span class="block text-center rounded-xl border border-slate-200 py-2.5 text-sm font-medium text-slate-700 hover:border-brand-blue transition peer-checked:border-brand-blue peer-checked:bg-brand-blue/10 peer-checked:text-brand-blue">
+                                        {{ $slot['time']->format('g:i A') }}
+                                    </span>
+                                </label>
+                            @else
+                                <div class="text-center rounded-xl border border-slate-100 bg-slate-50 py-2.5 text-sm text-slate-300 line-through cursor-not-allowed" title="Unavailable">
+                                    {{ $slot['time']->format('g:i A') }}
+                                </div>
+                            @endif
                         @endforeach
-                    </select>
-                    @error('service_id') <p class="mt-1 text-xs text-red-500">{{ $message }}</p> @enderror
+                    </div>
+                    <div class="mt-2 flex items-center gap-4 text-xs text-slate-400">
+                        <span class="inline-flex items-center gap-1"><span class="h-3 w-3 rounded border border-slate-200 inline-block"></span> Available</span>
+                        <span class="inline-flex items-center gap-1"><span class="h-3 w-3 rounded bg-slate-100 inline-block"></span> Unavailable</span>
+                    </div>
                 </div>
 
-                <div>
-                    <label for="dentist_id" class="block text-sm font-medium text-slate-700 mb-1">Dentist</label>
-                    <select id="dentist_id" name="dentist_id" required class="w-full h-11 px-3 rounded-xl border @error('dentist_id') border-red-400 @else border-slate-200 @enderror outline-none focus:border-brand-blue">
-                        <option value="">— Select a dentist —</option>
-                        @foreach ($dentists as $dentist)
-                            <option value="{{ $dentist->id }}" @selected((string) old('dentist_id') === (string) $dentist->id)>{{ $dentist->name }}</option>
-                        @endforeach
-                    </select>
-                    @error('dentist_id') <p class="mt-1 text-xs text-red-500">{{ $message }}</p> @enderror
-                </div>
-
-                <div>
-                    <label for="scheduled_at" class="block text-sm font-medium text-slate-700 mb-1">Preferred date &amp; time</label>
-                    <input id="scheduled_at" type="datetime-local" name="scheduled_at" value="{{ old('scheduled_at') }}" required
-                        class="w-full h-11 px-3 rounded-xl border @error('scheduled_at') border-red-400 @else border-slate-200 @enderror outline-none focus:border-brand-blue" />
-                    @error('scheduled_at') <p class="mt-1 text-xs text-red-500">{{ $message }}</p> @enderror
-                </div>
-
-                <div>
-                    <label for="notes" class="block text-sm font-medium text-slate-700 mb-1">Notes (optional)</label>
+                <div class="mt-5">
+                    <label for="notes" class="block text-xs font-medium text-slate-500 mb-1">Notes (optional)</label>
                     <textarea id="notes" name="notes" rows="2" class="w-full px-3 py-2 rounded-xl border border-slate-200 outline-none focus:border-brand-blue">{{ old('notes') }}</textarea>
                 </div>
 
-                <button class="w-full h-12 rounded-xl gradient-brand text-white font-semibold shadow-brand hover:opacity-90 transition">Confirm booking</button>
+                <button class="mt-5 w-full h-12 rounded-xl gradient-brand text-white font-semibold shadow-brand hover:opacity-90 transition">Confirm booking</button>
             </form>
-        </div>
+        @endif
     </div>
 @endsection

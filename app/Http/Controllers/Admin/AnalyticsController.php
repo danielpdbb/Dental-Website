@@ -31,9 +31,12 @@ class AnalyticsController extends Controller
             ];
         });
 
+        $collected = Payment::where('status', PaymentStatus::Paid->value)->sum('amount');
+
         return view('admin.analytics.index', [
             'totalAppointments' => $total,
-            'totalRevenue' => Payment::where('status', PaymentStatus::Paid->value)->sum('amount'),
+            'totalRevenue' => $collected,
+            'outstanding' => max(0, (float) Appointment::sum('total_amount') - (float) $collected),
             'cancellationRate' => $total > 0 ? round($cancelled / $total * 100, 1) : 0,
             'noShowRate' => $total > 0 ? round($noShow / $total * 100, 1) : 0,
             'statusCounts' => collect(AppointmentStatus::cases())->mapWithKeys(fn ($s) => [

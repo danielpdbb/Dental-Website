@@ -5,10 +5,15 @@
 
 @section('content')
     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-5">
-        <form method="GET" action="{{ route('clinic.patients.index') }}" class="flex gap-2">
+        <form method="GET" action="{{ route('clinic.patients.index') }}" class="flex flex-wrap gap-2">
             <input type="text" name="search" value="{{ $filters['search'] ?? '' }}" placeholder="Search name or phone"
                 class="h-10 px-4 rounded-lg border border-slate-200 text-sm focus:border-brand-blue focus:ring-2 focus:ring-brand-blue/20 outline-none w-64" />
-            <button type="submit" class="h-10 px-4 rounded-lg bg-slate-800 text-white text-sm font-medium hover:bg-slate-700 transition">Search</button>
+            <select name="account" class="h-10 px-3 rounded-lg border border-slate-200 text-sm outline-none focus:border-brand-blue">
+                <option value="">All patients</option>
+                <option value="registered" @selected(($filters['account'] ?? '') === 'registered')>With account</option>
+                <option value="walkin" @selected(($filters['account'] ?? '') === 'walkin')>Walk-in (no login)</option>
+            </select>
+            <button type="submit" class="h-10 px-4 rounded-lg bg-slate-800 text-white text-sm font-medium hover:bg-slate-700 transition">Filter</button>
         </form>
 
         <a href="{{ route('clinic.patients.create') }}"
@@ -25,21 +30,38 @@
                     <th class="px-5 py-3 font-medium">Name</th>
                     <th class="px-5 py-3 font-medium">Phone</th>
                     <th class="px-5 py-3 font-medium">Account</th>
+                    <th class="px-5 py-3 font-medium">Balance</th>
                     <th class="px-5 py-3 font-medium text-right">Actions</th>
                 </tr>
             </thead>
             <tbody class="divide-y divide-slate-100">
                 @forelse ($patients as $patient)
                     <tr class="hover:bg-slate-50/60">
-                        <td class="px-5 py-3 font-medium text-slate-800">{{ $patient->fullName() }}</td>
+                        <td class="px-5 py-3">
+                            <div class="flex items-center gap-3">
+                                @if ($patient->user)
+                                    @include('partials.avatar', ['user' => $patient->user, 'size' => 'h-9 w-9 text-xs'])
+                                @else
+                                    <span class="h-9 w-9 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center text-xs font-semibold shrink-0">{{ strtoupper(mb_substr($patient->first_name, 0, 1)) }}</span>
+                                @endif
+                                <span class="font-medium text-slate-800">{{ $patient->fullName() }}</span>
+                            </div>
+                        </td>
                         <td class="px-5 py-3 text-slate-500">{{ $patient->phone ?? '—' }}</td>
                         <td class="px-5 py-3 text-slate-500">{{ $patient->user?->email ?? 'Walk-in (no login)' }}</td>
+                        <td class="px-5 py-3">
+                            @if ($patient->outstandingBalance() > 0)
+                                <span class="text-red-500 font-medium">₱{{ number_format($patient->outstandingBalance(), 2) }}</span>
+                            @else
+                                <span class="text-slate-400">₱0.00</span>
+                            @endif
+                        </td>
                         <td class="px-5 py-3 text-right">
                             <a href="{{ route('clinic.patients.show', $patient) }}" class="text-brand-blue hover:underline">View</a>
                         </td>
                     </tr>
                 @empty
-                    <tr><td colspan="4" class="px-5 py-10 text-center text-slate-400">No patients found.</td></tr>
+                    <tr><td colspan="5" class="px-5 py-10 text-center text-slate-400">No patients found.</td></tr>
                 @endforelse
             </tbody>
         </table>

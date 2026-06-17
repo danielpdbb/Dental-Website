@@ -51,8 +51,10 @@
                         <td class="px-5 py-3 text-slate-500">{{ $appt->dentist?->name ?? '—' }}</td>
                         <td class="px-5 py-3"><span class="px-2.5 py-0.5 rounded-full text-xs font-medium {{ $appt->status->badgeClasses() }}">{{ $appt->status->label() }}</span></td>
                         <td class="px-5 py-3">
-                            @if ($appt->payment)
-                                <span class="px-2.5 py-0.5 rounded-full text-xs font-medium {{ $appt->payment->status->badgeClasses() }}">{{ $appt->payment->status->label() }}</span>
+                            @if ($appt->total_amount > 0 && $appt->balance() <= 0)
+                                <span class="px-2.5 py-0.5 rounded-full text-xs font-medium bg-brand-green/10 text-emerald-700">Paid</span>
+                            @elseif ($appt->total_amount > 0)
+                                <span class="text-xs font-medium text-red-500">₱{{ number_format($appt->balance(), 2) }} due</span>
                             @else
                                 <span class="text-xs text-slate-400">—</span>
                             @endif

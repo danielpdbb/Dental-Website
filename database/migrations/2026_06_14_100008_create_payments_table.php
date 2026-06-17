@@ -14,6 +14,10 @@ return new class extends Migration
             $table->decimal('amount', 10, 2);
             $table->string('method')->default('cash');
             $table->string('status')->default('pending');
+            // Gateway-ready columns (manual recording for now; PayMongo in Phase 2)
+            $table->string('gateway')->default('manual'); // manual | paymongo
+            $table->string('reference')->nullable();      // our reference / checkout id
+            $table->string('transaction_id')->nullable(); // gateway transaction id
             $table->dateTime('paid_at')->nullable();
             $table->foreignId('recorded_by')->nullable()->constrained('users')->nullOnDelete();
             $table->text('notes')->nullable();
