@@ -5,7 +5,7 @@
 
 @section('content')
     <div class="max-w-2xl rounded-2xl bg-white border border-slate-200/60 p-6 md:p-8 shadow-soft">
-        <form method="POST" action="{{ route('admin.services.store') }}">
+        <form method="POST" action="{{ route('admin.services.store') }}" data-review="Create this service?">
             @csrf
             @include('admin.services.form', ['service' => null])
             <div class="mt-7 flex items-center gap-3">

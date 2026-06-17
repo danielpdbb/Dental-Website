@@ -20,7 +20,7 @@ class PatientController extends Controller
         $this->authorize('viewAny', Patient::class);
 
         $patients = Patient::query()
-            ->with('user')
+            ->with(['user', 'appointments.payments'])
             ->when($request->string('search')->trim()->value(), function ($query, $search) {
                 $query->where(function ($q) use ($search) {
                     $q->where('first_name', 'like', "%{$search}%")
@@ -28,13 +28,18 @@ class PatientController extends Controller
                         ->orWhere('phone', 'like', "%{$search}%");
                 });
             })
+            ->when($request->string('account')->value(), function ($query, $account) {
+                $account === 'walkin'
+                    ? $query->whereNull('user_id')
+                    : $query->whereNotNull('user_id');
+            })
             ->orderBy('last_name')
             ->paginate(15)
             ->withQueryString();
 
         return view('clinic.patients.index', [
             'patients' => $patients,
-            'filters' => $request->only('search'),
+            'filters' => $request->only('search', 'account'),
         ]);
     }
 
@@ -59,7 +64,8 @@ class PatientController extends Controller
         $this->authorize('view', $patient);
 
         $patient->load(['user', 'allergies', 'treatments.dentist', 'treatments.service',
-            'recommendations.dentist', 'recommendations.service', 'appointments.service', 'appointments.dentist']);
+            'recommendations.dentist', 'recommendations.service', 'appointments.service',
+            'appointments.dentist', 'appointments.payments']);
 
         return view('clinic.patients.show', [
             'patient' => $patient,

@@ -18,6 +18,8 @@ return new class extends Migration
             $table->string('email')->unique();
             $table->string('role')->default('patient')->index();
             $table->boolean('is_active')->default(true);
+            $table->string('avatar_path')->nullable();
+            $table->timestamp('data_privacy_consent_at')->nullable();
             $table->timestamp('email_verified_at')->nullable();
             $table->string('password');
             $table->rememberToken();

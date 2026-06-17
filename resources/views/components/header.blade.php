@@ -32,6 +32,9 @@
                     class="text-sm font-medium text-slate-600 hover:text-brand-blue transition px-3 py-1.5">
                     Dashboard
                 </a>
+                <a href="{{ route('profile.edit') }}" class="flex items-center gap-2 hover:opacity-80 transition" title="My profile">
+                    @include('partials.avatar', ['user' => auth()->user(), 'size' => 'h-8 w-8 text-xs'])
+                </a>
                 <form method="POST" action="{{ route('logout') }}">
                     @csrf
                     <button type="submit"

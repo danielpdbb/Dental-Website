@@ -22,6 +22,9 @@ return Application::configure(basePath: dirname(__DIR__))
                 ? route('admin.login')
                 : route('login'),
         );
+
+        // Webhooks come from PayMongo's servers — no CSRF token.
+        $middleware->validateCsrfTokens(except: ['webhooks/*']);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(

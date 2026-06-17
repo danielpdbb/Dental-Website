@@ -25,7 +25,7 @@ class AppointmentController extends Controller
         $this->authorize('viewAny', Appointment::class);
 
         $appointments = Appointment::query()
-            ->with(['patient', 'dentist', 'service', 'payment'])
+            ->with(['patient', 'dentist', 'service', 'payments'])
             ->when($request->filled('status'), fn ($q) => $q->where('status', $request->string('status')))
             ->when($request->filled('dentist_id'), fn ($q) => $q->where('dentist_id', $request->integer('dentist_id')))
             ->when($request->filled('date'), fn ($q) => $q->whereDate('scheduled_at', $request->date('date')))
@@ -82,6 +82,7 @@ class AppointmentController extends Controller
             'service_id' => $service->id,
             'scheduled_at' => $start,
             'duration_minutes' => $service->duration_minutes,
+            'total_amount' => $service->price,
             'status' => AppointmentStatus::Booked,
             'is_walk_in' => $isWalkIn,
             'notes' => $request->input('notes'),
@@ -96,7 +97,7 @@ class AppointmentController extends Controller
     {
         $this->authorize('view', $appointment);
 
-        $appointment->load(['patient', 'dentist', 'service', 'payment', 'creator', 'canceller']);
+        $appointment->load(['patient', 'dentist', 'service', 'payments.recorder', 'creator', 'canceller']);
 
         return view('clinic.appointments.show', [
             'appointment' => $appointment,
@@ -133,6 +134,25 @@ class AppointmentController extends Controller
         $appointment->update(['status' => AppointmentStatus::NoShow]);
 
         return back()->with('status', 'Appointment marked as no-show.');
+    }
+
+    public function reschedule(Request $request, Appointment $appointment, PredictiveScheduler $scheduler): RedirectResponse
+    {
+        $this->authorize('reschedule', $appointment);
+
+        $request->validate(['scheduled_at' => ['required', 'date']]);
+        $start = Carbon::parse($request->date('scheduled_at'));
+
+        if ($error = $this->slotProblem($start, $appointment->duration_minutes)) {
+            return back()->withErrors(['scheduled_at' => $error]);
+        }
+        if (! $scheduler->isSlotAvailable($appointment->dentist, $start, $appointment->duration_minutes, $appointment->id)) {
+            return back()->withErrors(['scheduled_at' => 'That dentist is already booked at that time.']);
+        }
+
+        $appointment->update(['scheduled_at' => $start]);
+
+        return back()->with('status', 'Appointment rescheduled to '.$start->format('M j, Y g:i A').'.');
     }
 
     private function slotProblem(Carbon $start, int $duration): ?string

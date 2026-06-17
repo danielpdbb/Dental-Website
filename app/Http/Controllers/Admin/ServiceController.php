@@ -7,14 +7,25 @@ use App\Http\Requests\Admin\StoreServiceRequest;
 use App\Http\Requests\Admin\UpdateServiceRequest;
 use App\Models\Service;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Illuminate\View\View;
 
 class ServiceController extends Controller
 {
-    public function index(): View
+    public function index(Request $request): View
     {
+        $services = Service::query()
+            ->when($request->string('search')->trim()->value(), fn ($q, $search) => $q->where('name', 'like', "%{$search}%"))
+            ->when($request->filled('status'), function ($q) use ($request) {
+                $q->where('is_active', $request->string('status') === 'active');
+            })
+            ->orderBy('name')
+            ->paginate(20)
+            ->withQueryString();
+
         return view('admin.services.index', [
-            'services' => Service::orderBy('name')->paginate(20),
+            'services' => $services,
+            'filters' => $request->only('search', 'status'),
         ]);
     }
 

@@ -4,7 +4,18 @@
 @section('heading', 'Service & pricing management')
 
 @section('content')
-    <div class="flex justify-end mb-5">
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-5">
+        <form method="GET" action="{{ route('admin.services.index') }}" class="flex flex-wrap gap-2">
+            <input type="text" name="search" value="{{ $filters['search'] ?? '' }}" placeholder="Search service"
+                class="h-10 px-4 rounded-lg border border-slate-200 text-sm focus:border-brand-blue focus:ring-2 focus:ring-brand-blue/20 outline-none w-56" />
+            <select name="status" class="h-10 px-3 rounded-lg border border-slate-200 text-sm outline-none focus:border-brand-blue">
+                <option value="">All</option>
+                <option value="active" @selected(($filters['status'] ?? '') === 'active')>Active</option>
+                <option value="hidden" @selected(($filters['status'] ?? '') === 'hidden')>Hidden</option>
+            </select>
+            <button type="submit" class="h-10 px-4 rounded-lg bg-slate-800 text-white text-sm font-medium hover:bg-slate-700 transition">Filter</button>
+        </form>
+
         <a href="{{ route('admin.services.create') }}"
             class="h-10 px-4 inline-flex items-center gap-2 rounded-lg gradient-brand text-white text-sm font-semibold shadow-brand hover:opacity-90 transition">
             <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
@@ -39,7 +50,7 @@
                         <td class="px-5 py-3 text-right">
                             <div class="flex items-center justify-end gap-3">
                                 <a href="{{ route('admin.services.edit', $service) }}" class="text-brand-blue hover:underline">Edit</a>
-                                <form method="POST" action="{{ route('admin.services.destroy', $service) }}" onsubmit="return confirm('Remove this service?');">
+                                <form method="POST" action="{{ route('admin.services.destroy', $service) }}" data-confirm="Remove the service “{{ $service->name }}”?">
                                     @csrf @method('DELETE')
                                     <button class="text-red-500 hover:underline">Delete</button>
                                 </form>

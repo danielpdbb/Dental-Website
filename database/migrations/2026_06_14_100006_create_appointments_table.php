@@ -15,6 +15,7 @@ return new class extends Migration
             $table->foreignId('service_id')->nullable()->constrained()->nullOnDelete();
             $table->dateTime('scheduled_at');
             $table->unsignedInteger('duration_minutes')->default(30);
+            $table->decimal('total_amount', 10, 2)->default(0); // the charge for this appointment
             $table->string('status')->default('booked');
             $table->boolean('is_walk_in')->default(false);
             $table->text('notes')->nullable();

@@ -52,7 +52,7 @@ enum UserRole: string
         return match ($this) {
             self::Management => 'admin.dashboard',
             self::Receptionist => 'clinic.appointments.index',
-            self::Dentist => 'clinic.patients.index',
+            self::Dentist => 'clinic.my-schedule',
             self::Patient => 'dashboard',
         };
     }

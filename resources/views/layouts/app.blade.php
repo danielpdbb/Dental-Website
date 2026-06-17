@@ -37,6 +37,18 @@
             -webkit-text-fill-color: transparent;
             background-clip: text;
         }
+        /* Prettier native dropdowns: custom chevron + spacing */
+        select:not([multiple]) {
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2364748b' stroke-width='2'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 0.75rem center;
+            background-size: 1.1rem;
+            padding-right: 2.5rem;
+            cursor: pointer;
+        }
     </style>
     @stack('styles')
 </head>
@@ -45,13 +57,16 @@
 
     @include('components.header')
 
-    @include('partials.flash')
-
     <main class="flex-1">
         @yield('content')
     </main>
 
     @include('components.footer')
+
+    @include('partials.toast')
+    @include('partials.confirm-modal')
+    @include('partials.review-modal')
+    @include('partials.select')
 
     @stack('scripts')
 </body>

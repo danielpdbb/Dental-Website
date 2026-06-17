@@ -54,6 +54,20 @@ class AppointmentPolicy
     }
 
     /**
+     * Rescheduling — same rules as cancelling (own future booking, or front desk).
+     */
+    public function reschedule(User $user, Appointment $appointment): bool
+    {
+        if ($user->role === UserRole::Receptionist) {
+            return true;
+        }
+
+        return $user->role === UserRole::Patient
+            && $this->ownsAppointment($user, $appointment)
+            && $appointment->isCancellable();
+    }
+
+    /**
      * Marking completed / no-show is a front-desk action.
      */
     public function updateStatus(User $user, Appointment $appointment): bool

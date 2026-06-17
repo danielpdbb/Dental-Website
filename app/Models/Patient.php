@@ -29,6 +29,15 @@ class Patient extends Model
         return trim("{$this->first_name} {$this->last_name}");
     }
 
+    /**
+     * Total still owed across all of this patient's appointments.
+     */
+    public function outstandingBalance(): float
+    {
+        return (float) $this->appointments
+            ->sum(fn (Appointment $appointment) => $appointment->balance());
+    }
+
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);

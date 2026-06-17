@@ -5,7 +5,7 @@
 
 @section('content')
     <div class="max-w-3xl rounded-2xl bg-white border border-slate-200/60 p-6 md:p-8 shadow-soft">
-        <form method="POST" action="{{ route('clinic.patients.store') }}">
+        <form method="POST" action="{{ route('clinic.patients.store') }}" data-review="Create this patient record?">
             @csrf
             @include('clinic.patients.form', ['patient' => null])
             <div class="mt-7 flex items-center gap-3">

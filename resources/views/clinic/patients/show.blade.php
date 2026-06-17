@@ -16,7 +16,7 @@
                 <a href="{{ route('clinic.patients.edit', $patient) }}" class="h-9 px-4 inline-flex items-center rounded-lg border border-slate-200 text-sm font-medium hover:bg-slate-50 transition">Edit</a>
             @endcan
             @can('delete', $patient)
-                <form method="POST" action="{{ route('clinic.patients.destroy', $patient) }}" onsubmit="return confirm('Remove this patient record?');">
+                <form method="POST" action="{{ route('clinic.patients.destroy', $patient) }}" data-confirm="Remove the record for {{ $patient->fullName() }}?">
                     @csrf @method('DELETE')
                     <button class="h-9 px-4 rounded-lg border border-red-200 text-red-500 text-sm font-medium hover:bg-red-50 transition">Delete</button>
                 </form>
@@ -33,6 +33,7 @@
             <div><div class="text-slate-400 text-xs uppercase tracking-wider">Blood type</div>{{ $patient->blood_type ?? '—' }}</div>
             <div><div class="text-slate-400 text-xs uppercase tracking-wider">Phone</div>{{ $patient->phone ?? '—' }}</div>
             <div><div class="text-slate-400 text-xs uppercase tracking-wider">Account</div>{{ $patient->user?->email ?? 'Walk-in (no login)' }}</div>
+            <div><div class="text-slate-400 text-xs uppercase tracking-wider">Outstanding balance</div><span class="font-semibold {{ $patient->outstandingBalance() > 0 ? 'text-red-500' : 'text-emerald-600' }}">₱{{ number_format($patient->outstandingBalance(), 2) }}</span></div>
             <div><div class="text-slate-400 text-xs uppercase tracking-wider">Emergency</div>{{ $patient->emergency_contact_name ?? '—' }} {{ $patient->emergency_contact_phone }}</div>
             <div class="sm:col-span-3"><div class="text-slate-400 text-xs uppercase tracking-wider">Address</div>{{ $patient->address ?? '—' }}</div>
             <div class="sm:col-span-3"><div class="text-slate-400 text-xs uppercase tracking-wider">Medical history</div>{{ $patient->medical_history ?? '—' }}</div>
@@ -47,7 +48,8 @@
                 <span class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium {{ $allergy->severity->badgeClasses() }}">
                     {{ $allergy->name }} · {{ $allergy->severity->label() }}
                     @can('update', $patient)
-                        <form method="POST" action="{{ route('clinic.patients.allergies.destroy', [$patient, $allergy]) }}">
+                        <form method="POST" action="{{ route('clinic.patients.allergies.destroy', [$patient, $allergy]) }}"
+                            data-confirm="Remove the allergy “{{ $allergy->name }}”?">
                             @csrf @method('DELETE')
                             <button class="text-current opacity-60 hover:opacity-100">×</button>
                         </form>
@@ -88,10 +90,13 @@
                         @if ($treatment->notes)<div class="text-sm text-slate-500 mt-1">{{ $treatment->notes }}</div>@endif
                     </div>
                     @can('update', $patient)
-                        <form method="POST" action="{{ route('clinic.patients.treatments.destroy', [$patient, $treatment]) }}" onsubmit="return confirm('Remove this treatment?');">
-                            @csrf @method('DELETE')
-                            <button class="text-red-400 hover:text-red-600 text-sm">Remove</button>
-                        </form>
+                        <div class="flex items-center gap-3 shrink-0">
+                            <a href="{{ route('clinic.patients.treatments.edit', [$patient, $treatment]) }}" class="text-brand-blue hover:underline text-sm">Edit</a>
+                            <form method="POST" action="{{ route('clinic.patients.treatments.destroy', [$patient, $treatment]) }}" data-confirm="Remove this treatment record?">
+                                @csrf @method('DELETE')
+                                <button class="text-red-400 hover:text-red-600 text-sm">Remove</button>
+                            </form>
+                        </div>
                     @endcan
                 </div>
             @empty
@@ -138,6 +143,7 @@
                     <div class="flex items-center gap-2">
                         <span class="px-2.5 py-0.5 rounded-full text-xs font-medium {{ $rec->status->badgeClasses() }}">{{ $rec->status->label() }}</span>
                         @if ($canRecommend)
+                            <a href="{{ route('clinic.patients.recommendations.edit', [$patient, $rec]) }}" class="text-brand-blue hover:underline text-xs">Edit</a>
                             <form method="POST" action="{{ route('clinic.patients.recommendations.status', [$patient, $rec]) }}">
                                 @csrf @method('PATCH')
                                 <select name="status" onchange="this.form.submit()" class="h-8 px-2 rounded-lg border border-slate-200 text-xs outline-none focus:border-brand-blue">

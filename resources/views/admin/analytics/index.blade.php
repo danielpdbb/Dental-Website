@@ -14,6 +14,10 @@
             <div class="mt-2 font-display text-3xl font-bold text-emerald-600">₱{{ number_format($totalRevenue, 2) }}</div>
         </div>
         <div class="rounded-2xl bg-white border border-slate-200/60 p-6 shadow-soft">
+            <div class="text-xs uppercase tracking-wider text-slate-400">Outstanding</div>
+            <div class="mt-2 font-display text-3xl font-bold text-red-500">₱{{ number_format($outstanding, 2) }}</div>
+        </div>
+        <div class="rounded-2xl bg-white border border-slate-200/60 p-6 shadow-soft">
             <div class="text-xs uppercase tracking-wider text-slate-400">Cancellation rate</div>
             <div class="mt-2 font-display text-3xl font-bold text-slate-700">{{ $cancellationRate }}%</div>
         </div>

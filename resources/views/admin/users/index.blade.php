@@ -39,7 +39,12 @@
             <tbody class="divide-y divide-slate-100">
                 @forelse ($users as $row)
                     <tr class="hover:bg-slate-50/60">
-                        <td class="px-5 py-3 font-medium text-slate-800">{{ $row->name }}</td>
+                        <td class="px-5 py-3">
+                            <div class="flex items-center gap-3">
+                                @include('partials.avatar', ['user' => $row, 'size' => 'h-9 w-9 text-xs'])
+                                <span class="font-medium text-slate-800">{{ $row->name }}</span>
+                            </div>
+                        </td>
                         <td class="px-5 py-3 text-slate-500">{{ $row->username }}</td>
                         <td class="px-5 py-3 text-slate-500">{{ $row->email }}</td>
                         <td class="px-5 py-3">
@@ -66,7 +71,7 @@
                                 <a href="{{ route('admin.users.edit', $row) }}" class="text-brand-blue hover:underline">Edit</a>
                                 @can('delete', $row)
                                     <form method="POST" action="{{ route('admin.users.destroy', $row) }}"
-                                        onsubmit="return confirm('Remove {{ $row->name }}? Their account will be deactivated.');">
+                                        data-confirm="Remove {{ $row->name }}? Their account will be deactivated.">
                                         @csrf
                                         @method('DELETE')
                                         <button type="submit" class="text-red-500 hover:underline">Delete</button>
