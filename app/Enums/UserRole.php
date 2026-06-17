@@ -51,7 +51,9 @@ enum UserRole: string
     {
         return match ($this) {
             self::Management => 'admin.dashboard',
-            default => 'dashboard',
+            self::Receptionist => 'clinic.appointments.index',
+            self::Dentist => 'clinic.patients.index',
+            self::Patient => 'dashboard',
         };
     }
 

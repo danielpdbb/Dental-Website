@@ -5,7 +5,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="csrf-token" content="{{ csrf_token() }}" />
-    <title>@yield('title', 'Admin') — Bonoan's Dental Clinic</title>
+    <title>@yield('title', 'Clinic') — Bonoan's Dental Clinic</title>
 
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
@@ -33,6 +33,24 @@
 </head>
 
 <body class="min-h-screen bg-slate-50 text-slate-800">
+    @php
+        $role = auth()->user()->role->value;
+        $isMgmt = $role === 'management';
+        $canDesk = in_array($role, ['management', 'receptionist']); // appointments, referrals, scheduling
+
+        // [label, route name, active-pattern, visible?]
+        $links = array_filter([
+            ['Dashboard', 'admin.dashboard', 'admin.dashboard', $isMgmt],
+            ['Appointments', 'clinic.appointments.index', 'clinic.appointments.*', $canDesk],
+            ['Patients', 'clinic.patients.index', 'clinic.patients.*', true],
+            ['Scheduling', 'clinic.scheduling', 'clinic.scheduling', $canDesk],
+            ['Referrals', 'clinic.referrals.index', 'clinic.referrals.*', $canDesk],
+            ['Services', 'admin.services.index', 'admin.services.*', $isMgmt],
+            ['Analytics', 'admin.analytics', 'admin.analytics', $isMgmt],
+            ['Users', 'admin.users.index', 'admin.users.*', $isMgmt],
+        ], fn ($l) => $l[3]);
+    @endphp
+
     <div class="flex min-h-screen">
 
         <!-- Sidebar -->
@@ -41,20 +59,17 @@
                 <div class="w-9 h-9 rounded-lg gradient-brand flex items-center justify-center overflow-hidden">
                     <img src="/images/logo.jpg" alt="Logo" class="w-full h-full object-cover" />
                 </div>
-                <span class="font-display font-bold leading-tight">Admin Panel</span>
+                <span class="font-display font-bold leading-tight">Clinic Panel</span>
             </div>
 
             <nav class="flex-1 px-3 py-6 space-y-1 text-sm">
-                <a href="{{ route('admin.dashboard') }}"
-                    class="flex items-center gap-3 px-3 py-2 rounded-lg transition {{ request()->routeIs('admin.dashboard') ? 'bg-white/15 font-semibold' : 'text-white/80 hover:bg-white/10' }}">
-                    <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
-                    Dashboard
-                </a>
-                <a href="{{ route('admin.users.index') }}"
-                    class="flex items-center gap-3 px-3 py-2 rounded-lg transition {{ request()->routeIs('admin.users.*') ? 'bg-white/15 font-semibold' : 'text-white/80 hover:bg-white/10' }}">
-                    <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m6-1.13a4 4 0 100-8 4 4 0 000 8z"/></svg>
-                    Users
-                </a>
+                @foreach ($links as [$label, $routeName, $pattern])
+                    <a href="{{ route($routeName) }}"
+                        class="flex items-center gap-3 px-3 py-2 rounded-lg transition {{ request()->routeIs($pattern) ? 'bg-white/15 font-semibold' : 'text-white/80 hover:bg-white/10' }}">
+                        <span class="h-1.5 w-1.5 rounded-full bg-current opacity-60"></span>
+                        {{ $label }}
+                    </a>
+                @endforeach
             </nav>
 
             <div class="p-3 border-t border-white/10">
@@ -64,12 +79,12 @@
 
         <!-- Main column -->
         <div class="flex-1 flex flex-col min-w-0">
-            <!-- Top bar -->
             <header class="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6">
                 <h1 class="font-display text-lg font-bold">@yield('heading', 'Dashboard')</h1>
                 <div class="flex items-center gap-4">
-                    <span class="text-sm text-slate-500 hidden sm:block">{{ auth()->user()->name }}</span>
-                    <form method="POST" action="{{ route('admin.logout') }}">
+                    <span class="text-sm text-slate-500 hidden sm:block">{{ auth()->user()->name }}
+                        <span class="text-slate-300">·</span> {{ auth()->user()->role->label() }}</span>
+                    <form method="POST" action="{{ route('logout') }}">
                         @csrf
                         <button type="submit" class="text-sm font-medium text-slate-600 hover:text-red-500 transition">Log out</button>
                     </form>
@@ -80,6 +95,16 @@
                 @if (session('status'))
                     <div class="mb-5 rounded-xl border border-brand-green/30 bg-brand-green/10 text-emerald-800 px-4 py-3 text-sm">
                         {{ session('status') }}
+                    </div>
+                @endif
+
+                @if ($errors->any())
+                    <div class="mb-5 rounded-xl border border-red-200 bg-red-50 text-red-600 px-4 py-3 text-sm">
+                        <ul class="list-disc pl-5 space-y-0.5">
+                            @foreach ($errors->all() as $error)
+                                <li>{{ $error }}</li>
+                            @endforeach
+                        </ul>
                     </div>
                 @endif
 
