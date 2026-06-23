@@ -47,7 +47,7 @@
                     <tr class="hover:bg-slate-50/60">
                         <td class="px-5 py-3">{{ $appt->scheduled_at->format('M j, g:i A') }} @if($appt->is_walk_in)<span class="text-xs text-amber-600">(walk-in)</span>@endif</td>
                         <td class="px-5 py-3">{{ $appt->patient?->fullName() ?? '—' }}</td>
-                        <td class="px-5 py-3 text-slate-500">{{ $appt->service?->name ?? '—' }}</td>
+                        <td class="px-5 py-3 text-slate-500">{{ \Illuminate\Support\Str::limit($appt->proceduresLabel(), 40) }}</td>
                         <td class="px-5 py-3 text-slate-500">{{ $appt->dentist?->name ?? '—' }}</td>
                         <td class="px-5 py-3"><span class="px-2.5 py-0.5 rounded-full text-xs font-medium {{ $appt->status->badgeClasses() }}">{{ $appt->status->label() }}</span></td>
                         <td class="px-5 py-3">

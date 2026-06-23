@@ -10,6 +10,7 @@ use App\Models\Appointment;
 use App\Models\Service;
 use App\Models\User;
 use App\Services\PredictiveScheduler;
+use App\Services\RewardService;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -17,66 +18,104 @@ use Illuminate\View\View;
 
 class AppointmentController extends Controller
 {
-    public function index(Request $request): View
+    public function index(Request $request, RewardService $rewards): View
     {
         $patient = RecordController::resolvePatient($request->user());
 
         return view('portal.appointments.index', [
-            'upcoming' => $patient->appointments()->upcoming()->with(['service', 'dentist', 'payments'])->orderBy('scheduled_at')->get(),
+            // Active = anything not yet finished (booked → billed) so a Billed visit
+            // always shows here with its pay options; History = terminal states.
+            'upcoming' => $patient->appointments()
+                ->whereNotIn('status', ['completed', 'cancelled', 'no_show'])
+                ->with(['service', 'dentist', 'payments', 'procedures'])->orderBy('scheduled_at')->get(),
             'past' => $patient->appointments()
-                ->where(fn ($q) => $q->where('scheduled_at', '<', now())
-                    ->orWhereIn('status', ['completed', 'cancelled', 'no_show']))
-                ->with(['service', 'dentist', 'payments'])->latest('scheduled_at')->get(),
-            'outstanding' => $patient->appointments()->with('payments')->get()
+                ->whereIn('status', ['completed', 'cancelled', 'no_show'])
+                ->with(['service', 'dentist', 'payments', 'procedures'])->latest('scheduled_at')
+                ->paginate(8, ['*'], 'past')->withQueryString(),
+            'outstanding' => $patient->appointments()->where('status', AppointmentStatus::Billed->value)->with('payments')->get()
                 ->sum(fn ($a) => $a->balance()),
+            // Rewards context for the "apply credit" option on each bill.
+            'rewardPeso' => $rewards->pesoBalance($request->user()),
+            'minRedeemPeso' => $rewards->pesoValue((int) config('rewards.min_redeem_points')),
         ]);
     }
 
     public function create(Request $request, PredictiveScheduler $scheduler): View
     {
-        $service = $request->filled('service_id') ? Service::active()->find($request->integer('service_id')) : null;
+        $selectedIds = collect($request->input('service_ids', []))
+            ->filter()->map(fn ($v) => (int) $v)->values();
+
+        $selected = $selectedIds->isNotEmpty()
+            ? Service::active()->whereIn('id', $selectedIds)->orderBy('name')->get()
+            : collect();
+
         $dentist = $request->filled('dentist_id') ? User::where('role', UserRole::Dentist)->find($request->integer('dentist_id')) : null;
         $date = $request->filled('date') ? Carbon::parse($request->date('date')) : Carbon::today();
 
-        // Only build the time grid once a service + dentist are chosen.
-        $slots = ($service && $dentist)
-            ? $scheduler->daySlots($dentist, $service->duration_minutes, $date)
+        $totalDuration = (int) $selected->sum('duration_minutes');
+        $totalPrice = (float) $selected->sum('price');
+
+        // Only build the time grid once at least one service + a dentist are chosen.
+        $slots = ($selected->isNotEmpty() && $dentist)
+            ? $scheduler->daySlots($dentist, max(15, $totalDuration), $date)
             : null;
 
         return view('portal.appointments.create', [
             'services' => Service::active()->orderBy('name')->get(),
             'dentists' => User::where('role', UserRole::Dentist)->orderBy('name')->get(),
-            'service' => $service,
+            'selected' => $selected,
+            'selectedIds' => $selectedIds->all(),
             'dentist' => $dentist,
             'date' => $date,
             'slots' => $slots,
+            'totalDuration' => $totalDuration,
+            'totalPrice' => $totalPrice,
         ]);
     }
 
     public function store(BookAppointmentRequest $request, PredictiveScheduler $scheduler): RedirectResponse
     {
         $patient = RecordController::resolvePatient($request->user());
-        $service = Service::findOrFail($request->integer('service_id'));
+        $services = Service::active()->whereIn('id', $request->validated('service_ids'))->get();
         $dentist = User::findOrFail($request->integer('dentist_id'));
         $start = Carbon::parse($request->date('scheduled_at'));
+        $duration = max(15, (int) $services->sum('duration_minutes'));
 
-        if ($error = $this->slotProblem($scheduler, $dentist, $start, $service->duration_minutes)) {
+        if ($error = $this->slotProblem($scheduler, $dentist, $start, $duration)) {
             return back()->withInput()->withErrors(['scheduled_at' => $error]);
         }
 
-        $patient->appointments()->create([
+        $appointment = $patient->appointments()->create([
             'dentist_id' => $dentist->id,
-            'service_id' => $service->id,
+            'service_id' => $services->first()->id, // primary service (back-compat)
             'scheduled_at' => $start,
-            'duration_minutes' => $service->duration_minutes,
-            'total_amount' => $service->price,
+            'duration_minutes' => $duration,
+            'total_amount' => round((float) $services->sum('price'), 2),
             'status' => AppointmentStatus::Booked,
             'notes' => $request->input('notes'),
             'created_by' => $request->user()->id,
         ]);
 
+        $this->attachProcedures($appointment, $services);
+
         return redirect()->route('portal.appointments.index')
             ->with('status', 'Appointment booked for '.$start->format('M j, Y g:i A').'.');
+    }
+
+    /**
+     * Create a procedure line item per chosen service.
+     */
+    private function attachProcedures(Appointment $appointment, $services): void
+    {
+        foreach ($services as $service) {
+            $appointment->procedures()->create([
+                'service_id' => $service->id,
+                'procedure_name' => $service->name,
+                'price' => $service->price,
+                'duration_minutes' => $service->duration_minutes,
+                'status' => \App\Enums\ProcedureStatus::Planned,
+            ]);
+        }
     }
 
     public function reschedule(Request $request, Appointment $appointment, PredictiveScheduler $scheduler): View

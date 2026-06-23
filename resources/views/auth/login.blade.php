@@ -27,10 +27,13 @@
                             class="w-full h-11 px-4 rounded-xl border border-slate-200 focus:border-brand-blue focus:ring-2 focus:ring-brand-blue/20 outline-none transition" />
                     </div>
 
-                    <label class="flex items-center gap-2 text-sm text-slate-600">
-                        <input type="checkbox" name="remember" class="rounded border-slate-300 text-brand-blue focus:ring-brand-blue/30" />
-                        Remember me
-                    </label>
+                    <div class="flex items-center justify-between">
+                        <label class="flex items-center gap-2 text-sm text-slate-600">
+                            <input type="checkbox" name="remember" class="rounded border-slate-300 text-brand-blue focus:ring-brand-blue/30" />
+                            Remember me
+                        </label>
+                        <a href="{{ route('password.request') }}" class="text-sm font-medium text-gradient-brand">Forgot password?</a>
+                    </div>
 
                     <button type="submit"
                         class="w-full h-12 rounded-xl gradient-brand text-white font-semibold shadow-brand hover:opacity-90 transition">

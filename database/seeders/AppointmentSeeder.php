@@ -51,15 +51,17 @@ class AppointmentSeeder extends Seeder
             'notes' => 'Initial down payment (installment).',
         ]);
 
-        // Upcoming booked appointments (unpaid)
+        // A couple of booked (not-yet-completed) appointments dated 2026-06-23 — the
+        // boundary date — so the dentist→billing workflow is testable out of the box.
+        // No appointment is seeded later than this; the user creates future ones.
         Appointment::create([
             'patient_id' => $patients[0]->id, 'dentist_id' => $d1->id, 'service_id' => $cleaning->id,
-            'scheduled_at' => now()->addDays(3)->setTime(9, 0), 'duration_minutes' => $cleaning->duration_minutes,
+            'scheduled_at' => \Illuminate\Support\Carbon::create(2026, 6, 23, 9, 0), 'duration_minutes' => $cleaning->duration_minutes,
             'total_amount' => $cleaning->price, 'status' => AppointmentStatus::Booked, 'created_by' => $patients[0]->user_id,
         ]);
         Appointment::create([
             'patient_id' => $patients[1]->id, 'dentist_id' => $d2->id, 'service_id' => $whitening->id,
-            'scheduled_at' => now()->addDays(4)->setTime(13, 0), 'duration_minutes' => $whitening->duration_minutes,
+            'scheduled_at' => \Illuminate\Support\Carbon::create(2026, 6, 23, 13, 0), 'duration_minutes' => $whitening->duration_minutes,
             'total_amount' => $whitening->price, 'status' => AppointmentStatus::Booked, 'created_by' => $patients[1]->user_id,
         ]);
 
@@ -92,5 +94,19 @@ class AppointmentSeeder extends Seeder
                 'gateway' => 'manual', 'paid_at' => now()->subDays(4)->setTime(11, 45), 'recorded_by' => $reception->id,
             ]);
         }
+
+        // Give every seeded appointment a matching procedure line item.
+        Appointment::with('service')->whereDoesntHave('procedures')->get()->each(function (Appointment $a) {
+            $done = $a->status === AppointmentStatus::Completed;
+            $a->procedures()->create([
+                'service_id' => $a->service_id,
+                'procedure_name' => $a->service?->name ?? 'Procedure',
+                'price' => $a->total_amount > 0 ? $a->total_amount : ($a->service?->price ?? 0),
+                'duration_minutes' => $a->duration_minutes,
+                'status' => $done ? \App\Enums\ProcedureStatus::Performed : \App\Enums\ProcedureStatus::Planned,
+                'performed_by' => $done ? $a->dentist_id : null,
+                'performed_at' => $done ? $a->scheduled_at : null,
+            ]);
+        });
     }
 }

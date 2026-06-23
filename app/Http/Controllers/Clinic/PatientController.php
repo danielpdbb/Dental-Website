@@ -9,6 +9,8 @@ use App\Http\Requests\Patient\UpdatePatientRequest;
 use App\Models\Patient;
 use App\Models\Service;
 use App\Models\User;
+use App\Services\ML\IntakeFeatureExtractor;
+use App\Services\ML\ProcedureRecommendationModel;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -59,18 +61,34 @@ class PatientController extends Controller
             ->with('status', 'Patient record created.');
     }
 
-    public function show(Patient $patient): View
+    public function show(Patient $patient, ProcedureRecommendationModel $model, IntakeFeatureExtractor $extractor): View
     {
         $this->authorize('view', $patient);
 
-        $patient->load(['user', 'allergies', 'treatments.dentist', 'treatments.service',
-            'recommendations.dentist', 'recommendations.service', 'appointments.service',
-            'appointments.dentist', 'appointments.payments']);
+        $patient->load(['user', 'allergies', 'intake', 'treatments.dentist', 'treatments.service',
+            'recommendations.dentist', 'recommendations.service', 'appointments.payments']);
+
+        // Paginated appointment list (the full set can get long).
+        $appointments = $patient->appointments()
+            ->with(['service', 'dentist'])
+            ->latest('scheduled_at')
+            ->paginate(8, ['*'], 'appts')
+            ->withQueryString();
+
+        // Regression-based suggestions — only after a paid visit (workflow rule) and
+        // once the patient's clinical intake is on file and the model is trained.
+        $suggestions = collect();
+        if ($patient->intake && $patient->hasCompletedVisit() && $model->isTrained()) {
+            $age = $patient->date_of_birth ? (int) $patient->date_of_birth->age : 30;
+            $suggestions = $model->score($extractor->fromIntake($patient->intake, $age));
+        }
 
         return view('clinic.patients.show', [
             'patient' => $patient,
+            'appointments' => $appointments,
             'dentists' => User::where('role', UserRole::Dentist)->orderBy('name')->get(),
             'services' => Service::active()->orderBy('name')->get(),
+            'suggestions' => $suggestions,
         ]);
     }
 

@@ -21,13 +21,13 @@
             </div>
         @endif
 
-        <h2 class="font-display text-lg font-bold mt-8">Upcoming</h2>
+        <h2 class="font-display text-lg font-bold mt-8">Current &amp; upcoming</h2>
         <div class="mt-3 space-y-3">
             @forelse ($upcoming as $appt)
                 <div class="rounded-2xl bg-white border border-slate-200/60 p-5 shadow-soft">
                     <div class="flex items-center justify-between gap-4">
                         <div>
-                            <div class="font-medium">{{ $appt->service?->name ?? 'Appointment' }}</div>
+                            <div class="font-medium">{{ $appt->proceduresLabel() }}</div>
                             <div class="text-sm text-slate-500 mt-0.5">{{ $appt->scheduled_at->format('l, M j, Y · g:i A') }} · {{ $appt->dentist?->name }}</div>
                             @if ($appt->balance() > 0)
                                 <div class="text-xs text-red-500 mt-0.5">Balance: ₱{{ number_format($appt->balance(), 2) }}</div>
@@ -56,7 +56,7 @@
             @forelse ($past as $appt)
                 <div class="border-b border-slate-100 py-2">
                     <div class="flex items-center justify-between text-sm">
-                        <div>{{ $appt->scheduled_at->format('M j, Y') }} · {{ $appt->service?->name ?? '—' }} · {{ $appt->dentist?->name }}
+                        <div>{{ $appt->scheduled_at->format('M j, Y') }} · {{ $appt->proceduresLabel() }} · {{ $appt->dentist?->name }}
                             @if ($appt->balance() > 0)<span class="text-red-500">· ₱{{ number_format($appt->balance(), 2) }} due</span>@endif
                         </div>
                         <span class="px-2.5 py-0.5 rounded-full text-xs font-medium {{ $appt->status->badgeClasses() }}">{{ $appt->status->label() }}</span>
@@ -67,5 +67,6 @@
                 <p class="text-sm text-slate-400">No past appointments.</p>
             @endforelse
         </div>
+        <div class="mt-4">{{ $past->links() }}</div>
     </div>
 @endsection

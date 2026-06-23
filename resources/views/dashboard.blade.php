@@ -11,6 +11,7 @@
                 ['My appointments', 'portal.appointments.index', 'View upcoming and past visits, or cancel.'],
                 ['My record', 'portal.record', 'See your details, allergies and treatment history.'],
                 ['Referrals', 'portal.referrals.index', 'Request and track referrals.'],
+                ['Rewards', 'portal.rewards.index', 'Refer friends, earn points, save on bills.'],
             ],
             'receptionist' => [
                 ['Appointments', 'clinic.appointments.index', 'Handle bookings, walk-ins and payments.'],

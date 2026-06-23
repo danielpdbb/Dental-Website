@@ -67,6 +67,7 @@
     @include('partials.confirm-modal')
     @include('partials.review-modal')
     @include('partials.select')
+    @include('partials.chatbot')
 
     @stack('scripts')
 </body>

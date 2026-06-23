@@ -21,6 +21,8 @@ class DatabaseSeeder extends Seeder
             PatientSeeder::class,
             AppointmentSeeder::class,
             ClinicalRecordSeeder::class,
+            RewardSeeder::class,
+            AnalyticsDemoSeeder::class, // ~12 months of synthetic history for the dashboard
         ]);
     }
 }

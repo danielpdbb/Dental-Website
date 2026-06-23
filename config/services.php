@@ -42,6 +42,9 @@ return [
         // Payment methods offered on the hosted checkout (must be enabled in your
         // PayMongo dashboard). card + gcash are available by default in test mode.
         'methods' => ['card', 'gcash'],
+        // Safety switch: dynamic QR Ph is only allowed on TEST keys unless this is
+        // explicitly turned on — prevents accidental real charges during demos.
+        'allow_live_qr' => env('PAYMONGO_ALLOW_LIVE_QR', false),
     ],
 
 ];

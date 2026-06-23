@@ -43,12 +43,15 @@
                 </div>
                 <div class="flex-1 min-w-0 border-l border-slate-100 pl-4">
                     <div class="font-medium text-slate-800">{{ $appt->patient?->fullName() ?? '—' }}</div>
-                    <div class="text-sm text-slate-500">{{ $appt->service?->name ?? '—' }} · {{ $appt->duration_minutes }} min @if($appt->is_walk_in)<span class="text-amber-600">· walk-in</span>@endif</div>
+                    <div class="text-sm text-slate-500">{{ \Illuminate\Support\Str::limit($appt->proceduresLabel(), 45) }} · {{ $appt->duration_minutes }} min @if($appt->is_walk_in)<span class="text-amber-600">· walk-in</span>@endif</div>
                 </div>
                 <span class="px-2.5 py-0.5 rounded-full text-xs font-medium {{ $appt->status->badgeClasses() }}">{{ $appt->status->label() }}</span>
-                @if ($appt->patient)
-                    <a href="{{ route('clinic.patients.show', $appt->patient) }}" class="text-sm text-brand-blue hover:underline shrink-0">Record</a>
-                @endif
+                <div class="flex items-center gap-3 shrink-0">
+                    <a href="{{ route('clinic.appointments.treatment', $appt) }}" class="text-sm font-medium text-brand-blue hover:underline">Treatment</a>
+                    @if ($appt->patient)
+                        <a href="{{ route('clinic.patients.show', $appt->patient) }}" class="text-sm text-slate-500 hover:underline">Record</a>
+                    @endif
+                </div>
             </div>
         @empty
             <div class="rounded-2xl bg-white border border-slate-200/60 p-10 text-center text-slate-400 shadow-soft">
