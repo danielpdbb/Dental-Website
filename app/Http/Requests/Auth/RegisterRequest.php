@@ -40,6 +40,9 @@ class RegisterRequest extends FormRequest
             'date_of_birth' => ['required', 'date', 'before:today'],
             'address' => ['required', 'string', 'max:500'],
             'password' => ['required', 'confirmed', Password::defaults()],
+            // Optional "refer a friend" code — validated leniently; an unknown
+            // code is simply ignored rather than blocking sign-up.
+            'referral_code' => ['nullable', 'string', 'max:20'],
             // Data Privacy Act (RA 10173) consent — the checkbox must be ticked.
             'consent' => ['accepted'],
         ];

@@ -30,25 +30,30 @@
                 <input type="text" name="new_phone" value="{{ old('new_phone') }}" placeholder="Phone" class="h-11 px-3 rounded-xl border border-slate-200 outline-none focus:border-brand-blue text-sm" />
             </div>
 
-            <div class="grid sm:grid-cols-2 gap-3">
-                <div>
-                    <label for="service_id" class="block text-sm font-medium text-slate-700 mb-1">Service</label>
-                    <select id="service_id" name="service_id" required class="w-full h-11 px-3 rounded-xl border border-slate-200 outline-none focus:border-brand-blue">
-                        <option value="">— Select —</option>
-                        @foreach ($services as $service)
-                            <option value="{{ $service->id }}" @selected((string) old('service_id', $prefill['service_id'] ?? '') === (string) $service->id)>{{ $service->name }} ({{ $service->duration_minutes }} min)</option>
-                        @endforeach
-                    </select>
+            <div>
+                <label class="block text-sm font-medium text-slate-700 mb-1">Services / procedures (one or more)</label>
+                @php $checkedIds = (array) old('service_ids', isset($prefill['service_id']) ? [$prefill['service_id']] : []); @endphp
+                <div class="grid sm:grid-cols-2 gap-2">
+                    @foreach ($services as $service)
+                        <label class="flex items-center gap-2 rounded-xl border px-3 py-2.5 text-sm cursor-pointer transition {{ in_array($service->id, $checkedIds) ? 'border-brand-blue bg-brand-blue/5' : 'border-slate-200 hover:bg-slate-50' }}">
+                            <input type="checkbox" name="service_ids[]" value="{{ $service->id }}" @checked(in_array($service->id, $checkedIds))
+                                class="rounded border-slate-300 text-brand-blue focus:ring-brand-blue/30" />
+                            <span class="flex-1">{{ $service->name }}</span>
+                            <span class="text-slate-400 text-xs whitespace-nowrap">{{ $service->duration_minutes }}m · ₱{{ number_format($service->price, 2) }}</span>
+                        </label>
+                    @endforeach
                 </div>
-                <div>
-                    <label for="dentist_id" class="block text-sm font-medium text-slate-700 mb-1">Dentist</label>
-                    <select id="dentist_id" name="dentist_id" required class="w-full h-11 px-3 rounded-xl border border-slate-200 outline-none focus:border-brand-blue">
-                        <option value="">— Select —</option>
-                        @foreach ($dentists as $dentist)
-                            <option value="{{ $dentist->id }}" @selected((string) old('dentist_id', $prefill['dentist_id'] ?? '') === (string) $dentist->id)>{{ $dentist->name }}</option>
-                        @endforeach
-                    </select>
-                </div>
+                @error('service_ids') <p class="mt-1 text-xs text-red-500">{{ $message }}</p> @enderror
+            </div>
+
+            <div>
+                <label for="dentist_id" class="block text-sm font-medium text-slate-700 mb-1">Dentist</label>
+                <select id="dentist_id" name="dentist_id" required class="w-full h-11 px-3 rounded-xl border border-slate-200 outline-none focus:border-brand-blue">
+                    <option value="">— Select —</option>
+                    @foreach ($dentists as $dentist)
+                        <option value="{{ $dentist->id }}" @selected((string) old('dentist_id', $prefill['dentist_id'] ?? '') === (string) $dentist->id)>{{ $dentist->name }}</option>
+                    @endforeach
+                </select>
             </div>
 
             <div>

@@ -4,6 +4,7 @@
         ['Appointments', 'portal.appointments.index', 'portal.appointments.index'],
         ['Book', 'portal.appointments.create', 'portal.appointments.create'],
         ['Referrals', 'portal.referrals.index', 'portal.referrals.*'],
+        ['Rewards', 'portal.rewards.index', 'portal.rewards.*'],
     ];
 @endphp
 <div class="flex flex-wrap gap-2 mb-8 border-b border-slate-200 pb-3">

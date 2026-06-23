@@ -32,20 +32,25 @@
             </div>
         </div>
 
-        <!-- Treatment history -->
+        <!-- Treatment history (procedures from completed & paid visits) -->
         <div class="mt-6 rounded-2xl bg-white border border-slate-200/60 p-6 shadow-soft">
             <h2 class="font-display text-lg font-bold">Treatment history</h2>
+            <p class="text-xs text-slate-400 mt-0.5">Procedures that have been completed and paid for.</p>
             <div class="mt-3 space-y-3">
-                @forelse ($patient->treatments as $treatment)
-                    <div class="border-b border-slate-100 pb-3">
-                        <div class="font-medium">{{ $treatment->procedure_name }}</div>
-                        <div class="text-xs text-slate-500 mt-0.5">{{ $treatment->treatment_date->format('M j, Y') }} · {{ $treatment->dentist?->name ?? 'Dentist' }}</div>
-                        @if ($treatment->notes)<div class="text-sm text-slate-500 mt-1">{{ $treatment->notes }}</div>@endif
+                @forelse ($history as $proc)
+                    <div class="flex items-start justify-between gap-4 border-b border-slate-100 pb-3">
+                        <div>
+                            <div class="font-medium">{{ $proc->procedure_name }}</div>
+                            <div class="text-xs text-slate-500 mt-0.5">{{ $proc->appointment?->scheduled_at?->format('M j, Y') }} · {{ $proc->performer?->name ?? 'Dentist' }}</div>
+                            @if ($proc->notes)<div class="text-sm text-slate-500 mt-1">{{ $proc->notes }}</div>@endif
+                        </div>
+                        <span class="text-sm text-slate-600 whitespace-nowrap">₱{{ number_format($proc->price, 2) }}</span>
                     </div>
                 @empty
-                    <p class="text-sm text-slate-400">No treatments recorded yet.</p>
+                    <p class="text-sm text-slate-400">No completed treatments yet.</p>
                 @endforelse
             </div>
+            <div class="mt-4">{{ $history->links() }}</div>
         </div>
 
         <!-- Recommendations -->

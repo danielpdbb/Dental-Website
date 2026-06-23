@@ -85,6 +85,18 @@
                     </div>
                     @include('partials.password-strength')
 
+                    {{-- Optional referral code (prefilled from a ?ref= share link) --}}
+                    <div>
+                        <label for="referral_code" class="block text-sm font-medium text-slate-700 mb-1">
+                            Referral code <span class="text-slate-400 font-normal">(optional)</span>
+                        </label>
+                        <input id="referral_code" type="text" name="referral_code"
+                            value="{{ old('referral_code', request('ref')) }}" autocomplete="off" placeholder="e.g. BD-7K4QF2"
+                            class="w-full h-11 px-4 rounded-xl border @error('referral_code') border-red-400 @else border-slate-200 @enderror focus:border-brand-blue focus:ring-2 focus:ring-brand-blue/20 outline-none transition uppercase" />
+                        <p class="mt-1 text-xs text-slate-400">Got a code from a friend? Enter it and you'll both earn rewards after your first visit.</p>
+                        @error('referral_code') <p class="mt-1 text-xs text-red-500">{{ $message }}</p> @enderror
+                    </div>
+
                     {{-- Data Privacy Act consent --}}
                     <div class="pt-2">
                         <label class="flex items-start gap-2.5 text-sm text-slate-600">

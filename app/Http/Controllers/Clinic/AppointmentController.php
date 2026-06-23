@@ -12,7 +12,10 @@ use App\Models\Appointment;
 use App\Models\Patient;
 use App\Models\Service;
 use App\Models\User;
+use App\Services\ML\AppointmentFeatureExtractor;
+use App\Services\ML\SchedulingModel;
 use App\Services\PredictiveScheduler;
+use App\Services\RewardService;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -25,7 +28,7 @@ class AppointmentController extends Controller
         $this->authorize('viewAny', Appointment::class);
 
         $appointments = Appointment::query()
-            ->with(['patient', 'dentist', 'service', 'payments'])
+            ->with(['patient', 'dentist', 'service', 'payments', 'procedures'])
             ->when($request->filled('status'), fn ($q) => $q->where('status', $request->string('status')))
             ->when($request->filled('dentist_id'), fn ($q) => $q->where('dentist_id', $request->integer('dentist_id')))
             ->when($request->filled('date'), fn ($q) => $q->whereDate('scheduled_at', $request->date('date')))
@@ -55,16 +58,17 @@ class AppointmentController extends Controller
 
     public function store(StoreClinicAppointmentRequest $request, PredictiveScheduler $scheduler): RedirectResponse
     {
-        $service = Service::findOrFail($request->integer('service_id'));
+        $services = Service::active()->whereIn('id', $request->validated('service_ids'))->get();
         $dentist = User::findOrFail($request->integer('dentist_id'));
         $isWalkIn = $request->boolean('is_walk_in');
         $start = Carbon::parse($request->date('scheduled_at'));
+        $duration = max(15, (int) $services->sum('duration_minutes'));
 
         // Regular bookings must honour clinic hours; walk-ins are immediate.
-        if (! $isWalkIn && ($error = $this->slotProblem($start, $service->duration_minutes))) {
+        if (! $isWalkIn && ($error = $this->slotProblem($start, $duration))) {
             return back()->withInput()->withErrors(['scheduled_at' => $error]);
         }
-        if (! $scheduler->isSlotAvailable($dentist, $start, $service->duration_minutes)) {
+        if (! $scheduler->isSlotAvailable($dentist, $start, $duration)) {
             return back()->withInput()->withErrors(['scheduled_at' => 'That dentist is already booked at that time.']);
         }
 
@@ -77,32 +81,57 @@ class AppointmentController extends Controller
                 'phone' => $request->input('new_phone'),
             ]);
 
-        $patient->appointments()->create([
+        $appointment = $patient->appointments()->create([
             'dentist_id' => $dentist->id,
-            'service_id' => $service->id,
+            'service_id' => $services->first()->id, // primary service (back-compat)
             'scheduled_at' => $start,
-            'duration_minutes' => $service->duration_minutes,
-            'total_amount' => $service->price,
+            'duration_minutes' => $duration,
+            'total_amount' => round((float) $services->sum('price'), 2),
             'status' => AppointmentStatus::Booked,
             'is_walk_in' => $isWalkIn,
             'notes' => $request->input('notes'),
             'created_by' => $request->user()->id,
         ]);
 
+        foreach ($services as $service) {
+            $appointment->procedures()->create([
+                'service_id' => $service->id,
+                'procedure_name' => $service->name,
+                'price' => $service->price,
+                'duration_minutes' => $service->duration_minutes,
+                'status' => \App\Enums\ProcedureStatus::Planned,
+            ]);
+        }
+
         return redirect()->route('clinic.appointments.index')
             ->with('status', 'Appointment created.');
     }
 
-    public function show(Appointment $appointment): View
+    public function show(Appointment $appointment, RewardService $rewards, SchedulingModel $model, AppointmentFeatureExtractor $extractor): View
     {
         $this->authorize('view', $appointment);
 
-        $appointment->load(['patient', 'dentist', 'service', 'payments.recorder', 'creator', 'canceller']);
+        $appointment->load(['patient.user', 'dentist', 'service', 'payments.recorder', 'creator', 'canceller', 'procedures.service', 'procedures.performer', 'billingStatement']);
+
+        $patientUser = $appointment->patient?->user;
+
+        // No-show risk (Decision Tree) — only meaningful for upcoming bookings.
+        $risk = null;
+        if ($appointment->status === AppointmentStatus::Booked) {
+            $keep = $model->keepProbability($extractor->appointmentVector($appointment));
+            if ($keep !== null) {
+                [$label, $classes] = $model->riskBadge($keep);
+                $risk = ['keep' => $keep, 'label' => $label, 'classes' => $classes];
+            }
+        }
 
         return view('clinic.appointments.show', [
             'appointment' => $appointment,
-            'methods' => PaymentMethod::options(),
+            'methods' => PaymentMethod::manualOptions(),
             'paymentStatuses' => PaymentStatus::options(),
+            'rewardPoints' => $patientUser ? $rewards->pointsBalance($patientUser) : 0,
+            'rewardMax' => $patientUser ? $rewards->maxRedeemablePeso($patientUser, $appointment) : 0.0,
+            'risk' => $risk,
         ]);
     }
 
@@ -120,10 +149,14 @@ class AppointmentController extends Controller
         return back()->with('status', 'Appointment cancelled.');
     }
 
-    public function complete(Appointment $appointment): RedirectResponse
+    public function complete(Appointment $appointment, RewardService $rewards): RedirectResponse
     {
         $this->authorize('updateStatus', $appointment);
         $appointment->update(['status' => AppointmentStatus::Completed]);
+
+        // A completed visit can turn a pending "refer a friend" sign-up into a
+        // rewarded one (idempotent — no-ops if there's nothing to reward).
+        $rewards->checkQualification($appointment->patient?->user);
 
         return back()->with('status', 'Appointment marked completed.');
     }

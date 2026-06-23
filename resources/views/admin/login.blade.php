@@ -45,6 +45,10 @@
                     Sign in
                 </button>
             </form>
+
+            <p class="mt-5 text-center text-sm">
+                <a href="{{ route('password.request') }}" class="font-medium text-slate-500 hover:text-brand-blue transition">Forgot password?</a>
+            </p>
         </div>
 
         <p class="text-center mt-6">

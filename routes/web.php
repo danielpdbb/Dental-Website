@@ -2,17 +2,24 @@
 
 use App\Http\Controllers\Admin\AnalyticsController;
 use App\Http\Controllers\Admin\AuthController as AdminAuthController;
+use App\Http\Controllers\Admin\ReportExportController;
 use App\Http\Controllers\Admin\DashboardController as AdminDashboardController;
 use App\Http\Controllers\Admin\ServiceController;
 use App\Http\Controllers\Admin\UserController as AdminUserController;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\EmailVerificationController;
+use App\Http\Controllers\Auth\NewPasswordController;
+use App\Http\Controllers\Auth\PasswordResetLinkController;
 use App\Http\Controllers\Auth\RegisteredUserController;
 use App\Http\Controllers\Clinic\AllergyController;
 use App\Http\Controllers\Clinic\AppointmentController as ClinicAppointmentController;
+use App\Http\Controllers\Clinic\BillingController;
+use App\Http\Controllers\Clinic\ClinicalIntakeController;
+use App\Http\Controllers\Clinic\CurrentTreatmentController;
 use App\Http\Controllers\Clinic\DentistScheduleController;
 use App\Http\Controllers\Clinic\PatientController;
 use App\Http\Controllers\Clinic\PaymentController;
+use App\Http\Controllers\Clinic\QrPaymentController;
 use App\Http\Controllers\Clinic\RecommendationController;
 use App\Http\Controllers\Clinic\ReferralController as ClinicReferralController;
 use App\Http\Controllers\Clinic\SchedulingController;
@@ -23,6 +30,7 @@ use App\Http\Controllers\Portal\AppointmentController as PortalAppointmentContro
 use App\Http\Controllers\Portal\OnlinePaymentController;
 use App\Http\Controllers\Portal\RecordController;
 use App\Http\Controllers\Portal\ReferralController as PortalReferralController;
+use App\Http\Controllers\Portal\RewardController as PortalRewardController;
 use App\Http\Controllers\Webhooks\PayMongoController as PayMongoWebhookController;
 use Illuminate\Support\Facades\Route;
 
@@ -35,6 +43,10 @@ Route::view('/', 'welcome')->name('home');
 Route::get('/services', [\App\Http\Controllers\PageController::class, 'services'])->name('services');
 Route::view('/about', 'about')->name('about');
 Route::view('/contact', 'contact')->name('contact');
+
+// Chat assistant (public, used by the floating widget)
+Route::post('/chat', [\App\Http\Controllers\ChatbotController::class, 'reply'])
+    ->middleware('throttle:30,1')->name('chat');
 
 // PayMongo webhook (no auth, no CSRF — verified via signature)
 Route::post('/webhooks/paymongo', [PayMongoWebhookController::class, 'handle'])->name('webhooks.paymongo');
@@ -50,6 +62,12 @@ Route::middleware('guest')->group(function () {
 
     Route::get('/login', [AuthenticatedSessionController::class, 'create'])->name('login');
     Route::post('/login', [AuthenticatedSessionController::class, 'store']);
+
+    // Forgot / reset password (link emailed via the clinic-branded notification)
+    Route::get('/forgot-password', [PasswordResetLinkController::class, 'create'])->name('password.request');
+    Route::post('/forgot-password', [PasswordResetLinkController::class, 'store'])->name('password.email');
+    Route::get('/reset-password/{token}', [NewPasswordController::class, 'create'])->name('password.reset');
+    Route::post('/reset-password', [NewPasswordController::class, 'store'])->name('password.store');
 });
 
 Route::post('/logout', [AuthenticatedSessionController::class, 'destroy'])
@@ -112,6 +130,7 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::resource('users', AdminUserController::class)->except('show');
         Route::resource('services', ServiceController::class)->except('show');
         Route::get('/analytics', [AnalyticsController::class, 'index'])->name('analytics');
+        Route::get('/analytics/export/appointments.{format}', [ReportExportController::class, 'appointments'])->name('analytics.export');
     });
 });
 
@@ -135,8 +154,14 @@ Route::middleware(['auth', 'verified', 'role:patient'])->prefix('portal')->name(
     Route::get('/appointments/{appointment}/pay/success', [OnlinePaymentController::class, 'success'])->name('appointments.pay.success');
     Route::get('/appointments/{appointment}/pay/cancel', [OnlinePaymentController::class, 'cancel'])->name('appointments.pay.cancel');
 
+    // Spend rewards credit on a bill
+    Route::post('/appointments/{appointment}/redeem', [PortalRewardController::class, 'redeem'])->name('appointments.redeem');
+
     Route::get('/referrals', [PortalReferralController::class, 'index'])->name('referrals.index');
     Route::post('/referrals', [PortalReferralController::class, 'store'])->name('referrals.store');
+
+    // Refer a friend — rewards hub
+    Route::get('/rewards', [PortalRewardController::class, 'index'])->name('rewards.index');
 });
 
 /*
@@ -153,13 +178,22 @@ Route::middleware(['auth', 'role:receptionist,dentist,management'])->prefix('cli
     Route::get('patients/{patient}/treatments/{treatment}/edit', [TreatmentController::class, 'edit'])->name('patients.treatments.edit');
     Route::put('patients/{patient}/treatments/{treatment}', [TreatmentController::class, 'update'])->name('patients.treatments.update');
     Route::delete('patients/{patient}/treatments/{treatment}', [TreatmentController::class, 'destroy'])->name('patients.treatments.destroy');
+    Route::post('patients/{patient}/intake', [ClinicalIntakeController::class, 'save'])->name('patients.intake.save');
     Route::post('patients/{patient}/recommendations', [RecommendationController::class, 'store'])->name('patients.recommendations.store');
+    Route::get('patients/{patient}/recommendations/download/{format}', [RecommendationController::class, 'download'])->name('patients.recommendations.download');
     Route::get('patients/{patient}/recommendations/{recommendation}/edit', [RecommendationController::class, 'edit'])->name('patients.recommendations.edit');
     Route::put('patients/{patient}/recommendations/{recommendation}', [RecommendationController::class, 'update'])->name('patients.recommendations.update');
     Route::patch('patients/{patient}/recommendations/{recommendation}', [RecommendationController::class, 'updateStatus'])->name('patients.recommendations.status');
 
     // Dentist's daily schedule (dentists see their own; managers/reception can pick)
     Route::get('my-schedule', [DentistScheduleController::class, 'index'])->name('my-schedule');
+
+    // Current-treatment workspace — dentist (own appts) + management
+    Route::get('appointments/{appointment}/treatment', [CurrentTreatmentController::class, 'edit'])->name('appointments.treatment');
+    Route::post('appointments/{appointment}/treatment/procedures', [CurrentTreatmentController::class, 'addProcedure'])->name('appointments.treatment.add');
+    Route::patch('appointments/{appointment}/treatment/procedures/{procedure}', [CurrentTreatmentController::class, 'togglePerformed'])->name('appointments.treatment.toggle');
+    Route::delete('appointments/{appointment}/treatment/procedures/{procedure}', [CurrentTreatmentController::class, 'removeProcedure'])->name('appointments.treatment.remove');
+    Route::post('appointments/{appointment}/treatment/endorse', [CurrentTreatmentController::class, 'endorse'])->name('appointments.treatment.endorse');
 
     // Appointment desk — receptionist & management only
     Route::middleware('role:receptionist,management')->group(function () {
@@ -172,6 +206,17 @@ Route::middleware(['auth', 'role:receptionist,dentist,management'])->prefix('cli
         Route::post('appointments/{appointment}/no-show', [ClinicAppointmentController::class, 'noShow'])->name('appointments.no-show');
         Route::put('appointments/{appointment}/reschedule', [ClinicAppointmentController::class, 'reschedule'])->name('appointments.reschedule');
         Route::post('appointments/{appointment}/payment', [PaymentController::class, 'store'])->name('appointments.payment.store');
+        Route::post('appointments/{appointment}/redeem-rewards', [PaymentController::class, 'redeemRewards'])->name('appointments.redeem-rewards');
+
+        // Billing queue + statement creation (receptionist / management)
+        Route::get('billing', [BillingController::class, 'index'])->name('billing.index');
+        Route::post('appointments/{appointment}/billing', [BillingController::class, 'store'])->name('appointments.billing.store');
+
+        // In-store GCash QR (PayMongo QR Ph)
+        Route::post('appointments/{appointment}/qr', [QrPaymentController::class, 'generate'])->name('appointments.qr.generate');
+        Route::get('appointments/{appointment}/qr/{payment}', [QrPaymentController::class, 'show'])->name('appointments.qr.show');
+        Route::get('appointments/{appointment}/qr/{payment}/check', [QrPaymentController::class, 'check'])->name('appointments.qr.check');
+        Route::post('appointments/{appointment}/qr/{payment}/cancel', [QrPaymentController::class, 'cancel'])->name('appointments.qr.cancel');
 
         Route::get('referrals', [ClinicReferralController::class, 'index'])->name('referrals.index');
         Route::patch('referrals/{referral}', [ClinicReferralController::class, 'update'])->name('referrals.update');

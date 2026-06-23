@@ -75,6 +75,23 @@ class AppointmentPolicy
         return $user->role === UserRole::Receptionist;
     }
 
+    /**
+     * Recording the "current treatment" (procedures) + endorsing is the dentist's
+     * job, for their own appointments. (Management is allowed via before().)
+     */
+    public function recordTreatment(User $user, Appointment $appointment): bool
+    {
+        return $user->role === UserRole::Dentist && $appointment->dentist_id === $user->id;
+    }
+
+    /**
+     * Creating the billing statement is a front-desk action.
+     */
+    public function bill(User $user, Appointment $appointment): bool
+    {
+        return $user->role === UserRole::Receptionist;
+    }
+
     private function isStaff(User $user): bool
     {
         return in_array($user->role, [UserRole::Receptionist, UserRole::Dentist], true);

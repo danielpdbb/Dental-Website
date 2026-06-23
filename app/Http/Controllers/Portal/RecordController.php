@@ -21,7 +21,10 @@ class RecordController extends Controller
         $patient->load(['allergies', 'treatments.dentist', 'treatments.service',
             'recommendations.dentist', 'recommendations.service']);
 
-        return view('portal.record.show', ['patient' => $patient]);
+        // Treatment history (performed procedures on paid visits) — paginated.
+        $history = $patient->treatmentHistoryQuery()->paginate(8, ['*'], 'history')->withQueryString();
+
+        return view('portal.record.show', ['patient' => $patient, 'history' => $history]);
     }
 
     /**

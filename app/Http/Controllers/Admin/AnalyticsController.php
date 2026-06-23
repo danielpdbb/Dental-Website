@@ -3,46 +3,48 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Enums\AppointmentStatus;
-use App\Enums\PaymentStatus;
+use App\Enums\ServiceCategory;
+use App\Enums\UserRole;
 use App\Http\Controllers\Controller;
-use App\Models\Appointment;
-use App\Models\Payment;
+use App\Models\Service;
+use App\Models\User;
+use App\Services\Analytics\ReportFilter;
+use App\Services\Analytics\ReportService;
+use Illuminate\Http\Request;
 use Illuminate\View\View;
 
 class AnalyticsController extends Controller
 {
-    public function index(): View
+    public function index(Request $request): View
     {
-        $total = Appointment::count();
-        $cancelled = Appointment::where('status', AppointmentStatus::Cancelled->value)->count();
-        $noShow = Appointment::where('status', AppointmentStatus::NoShow->value)->count();
+        $filter = ReportFilter::fromRequest($request);
+        $service = new ReportService($filter);
 
-        // Last 6 months: appointment volume + collected revenue.
-        $months = collect(range(5, 0))->map(function (int $i) {
-            $month = now()->startOfMonth()->subMonths($i);
-
-            return [
-                'label' => $month->format('M Y'),
-                'appointments' => Appointment::whereYear('scheduled_at', $month->year)
-                    ->whereMonth('scheduled_at', $month->month)->count(),
-                'revenue' => Payment::where('status', PaymentStatus::Paid->value)
-                    ->whereYear('paid_at', $month->year)
-                    ->whereMonth('paid_at', $month->month)->sum('amount'),
-            ];
-        });
-
-        $collected = Payment::where('status', PaymentStatus::Paid->value)->sum('amount');
+        // Pivot: rows follow the chosen dimension (but avoid month × month), cols = month.
+        $pivotRows = $filter->groupBy === 'month' ? 'category' : $filter->groupBy;
 
         return view('admin.analytics.index', [
-            'totalAppointments' => $total,
-            'totalRevenue' => $collected,
-            'outstanding' => max(0, (float) Appointment::sum('total_amount') - (float) $collected),
-            'cancellationRate' => $total > 0 ? round($cancelled / $total * 100, 1) : 0,
-            'noShowRate' => $total > 0 ? round($noShow / $total * 100, 1) : 0,
-            'statusCounts' => collect(AppointmentStatus::cases())->mapWithKeys(fn ($s) => [
-                $s->label() => Appointment::where('status', $s->value)->count(),
-            ]),
-            'months' => $months,
+            'filter' => $filter,
+            'kpis' => $service->kpis(),
+            'series' => $service->timeSeries(),
+            'aggregate' => $service->aggregate($filter->groupBy),
+            'serviceRevenue' => $service->lineItemRevenue('service'),
+            'categoryMix' => $service->lineItemRevenue('category'),
+            'paymentMix' => $service->paymentMethodMix(),
+            'pivot' => $service->pivot($pivotRows, 'month', $filter->measure),
+            'pivotRowsDim' => $pivotRows,
+            'heatmap' => $service->demandHeatmap(),
+            'segments' => $service->segments(3),
+            'appointments' => $service->tableQuery()->paginate(15)->withQueryString(),
+
+            // Filter-bar option lists
+            'dentists' => User::where('role', UserRole::Dentist)->orderBy('name')->get(),
+            'serviceList' => Service::orderBy('name')->get(),
+            'dimensions' => ReportFilter::DIMENSIONS,
+            'measures' => ReportFilter::MEASURES,
+            'buckets' => ReportFilter::BUCKETS,
+            'statuses' => AppointmentStatus::options(),
+            'categories' => ServiceCategory::options(),
         ]);
     }
 }

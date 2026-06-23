@@ -48,6 +48,11 @@ class Patient extends Model
         return $this->hasMany(Allergy::class);
     }
 
+    public function intake(): \Illuminate\Database\Eloquent\Relations\HasOne
+    {
+        return $this->hasOne(ClinicalIntake::class);
+    }
+
     public function treatments(): HasMany
     {
         return $this->hasMany(Treatment::class)->latest('treatment_date');
@@ -66,5 +71,38 @@ class Patient extends Model
     public function referrals(): HasMany
     {
         return $this->hasMany(Referral::class)->latest();
+    }
+
+    /**
+     * Has the patient completed (and paid for) at least one visit? Gates procedure
+     * recommendations and their download (per the clinic's workflow rules).
+     */
+    public function hasCompletedVisit(): bool
+    {
+        return $this->appointments()
+            ->where('status', \App\Enums\AppointmentStatus::Completed->value)
+            ->exists();
+    }
+
+    /**
+     * Treatment history = procedures actually performed on COMPLETED (paid) visits.
+     * This is what moves into "history" once the patient has paid.
+     *
+     * @return \Illuminate\Support\Collection<int, \App\Models\AppointmentProcedure>
+     */
+    public function treatmentHistoryQuery()
+    {
+        return AppointmentProcedure::query()
+            ->where('status', \App\Enums\ProcedureStatus::Performed)
+            ->whereHas('appointment', fn ($q) => $q
+                ->where('patient_id', $this->id)
+                ->where('status', \App\Enums\AppointmentStatus::Completed))
+            ->with(['appointment', 'service', 'performer'])
+            ->orderByDesc('performed_at');
+    }
+
+    public function treatmentHistory(): \Illuminate\Support\Collection
+    {
+        return $this->treatmentHistoryQuery()->get();
     }
 }

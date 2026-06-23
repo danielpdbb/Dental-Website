@@ -56,6 +56,7 @@
             ['Dashboard', 'admin.dashboard', 'admin.dashboard', $isMgmt],
             ['My schedule', 'clinic.my-schedule', 'clinic.my-schedule', $isDentist || $isMgmt],
             ['Appointments', 'clinic.appointments.index', 'clinic.appointments.*', $canDesk],
+            ['Billing', 'clinic.billing.index', 'clinic.billing.*', $canDesk],
             ['Patients', 'clinic.patients.index', 'clinic.patients.*', true],
             ['Scheduling', 'clinic.scheduling', 'clinic.scheduling', $canDesk],
             ['Referrals', 'clinic.referrals.index', 'clinic.referrals.*', $canDesk],

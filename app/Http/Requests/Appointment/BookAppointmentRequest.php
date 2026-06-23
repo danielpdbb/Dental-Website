@@ -21,7 +21,9 @@ class BookAppointmentRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'service_id' => ['required', Rule::exists('services', 'id')->where('is_active', true)],
+            // One appointment can include several procedures (services).
+            'service_ids' => ['required', 'array', 'min:1'],
+            'service_ids.*' => [Rule::exists('services', 'id')->where('is_active', true)],
             'dentist_id' => ['required', Rule::exists('users', 'id')->where('role', 'dentist')],
             'scheduled_at' => ['required', 'date', 'after:now'],
             'notes' => ['nullable', 'string', 'max:1000'],

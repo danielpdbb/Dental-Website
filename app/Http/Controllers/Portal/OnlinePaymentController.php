@@ -7,6 +7,7 @@ use App\Enums\PaymentStatus;
 use App\Http\Controllers\Controller;
 use App\Models\Appointment;
 use App\Services\PayMongoService;
+use App\Services\RewardService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 
@@ -70,7 +71,7 @@ class OnlinePaymentController extends Controller
     /**
      * PayMongo redirects here after the patient authorizes — verify and record.
      */
-    public function success(Request $request, Appointment $appointment, PayMongoService $paymongo): RedirectResponse
+    public function success(Request $request, Appointment $appointment, PayMongoService $paymongo, RewardService $rewards): RedirectResponse
     {
         $payment = $appointment->payments()
             ->where('id', $request->integer('pid'))
@@ -98,6 +99,10 @@ class OnlinePaymentController extends Controller
                 'transaction_id' => $paid['id'] ?? null,
                 'method' => $this->mapMethod($paid['attributes']['source']['type'] ?? null),
             ]);
+
+            // Settle the visit if this clears the balance, then check referral reward.
+            $appointment->settleIfPaid();
+            $rewards->checkQualification($appointment->patient?->user);
 
             return redirect()->route('portal.appointments.index')
                 ->with('status', 'Payment of ₱'.number_format($payment->amount, 2).' received. Thank you!');
