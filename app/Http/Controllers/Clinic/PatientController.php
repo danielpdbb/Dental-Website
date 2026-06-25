@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Clinic;
 
+use App\Enums\AppointmentStatus;
 use App\Enums\UserRole;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Patient\StorePatientRequest;
@@ -61,34 +62,65 @@ class PatientController extends Controller
             ->with('status', 'Patient record created.');
     }
 
-    public function show(Patient $patient, ProcedureRecommendationModel $model, IntakeFeatureExtractor $extractor): View
+    public function show(Request $request, Patient $patient): View
     {
         $this->authorize('view', $patient);
 
-        $patient->load(['user', 'allergies', 'intake', 'treatments.dentist', 'treatments.service',
-            'recommendations.dentist', 'recommendations.service', 'appointments.payments']);
+        $patient->load(['user', 'allergies', 'appointments.payments']);
 
-        // Paginated appointment list (the full set can get long).
+        // Paginated, filterable appointment list (the full set can get long).
+        $apptStatus = $request->string('appt_status')->toString() ?: null;
         $appointments = $patient->appointments()
             ->with(['service', 'dentist'])
+            ->when($apptStatus, fn ($q) => $q->where('status', $apptStatus))
             ->latest('scheduled_at')
             ->paginate(8, ['*'], 'appts')
             ->withQueryString();
 
-        // Regression-based suggestions — only after a paid visit (workflow rule) and
-        // once the patient's clinical intake is on file and the model is trained.
-        $suggestions = collect();
-        if ($patient->intake && $patient->hasCompletedVisit() && $model->isTrained()) {
-            $age = $patient->date_of_birth ? (int) $patient->date_of_birth->age : 30;
-            $suggestions = $model->score($extractor->fromIntake($patient->intake, $age));
-        }
+        // Clinical summary — one card per past visit that has findings or an accepted
+        // follow-up. Paginated (3/page) + filterable by doctor / procedure.
+        $acceptedRec = fn ($r) => $r
+            ->where('status', \App\Enums\AdviceStatus::Accepted->value)
+            ->where('source', \App\Enums\RecommendationSource::Stage2Next->value);
+
+        $csDentist = $request->integer('cs_dentist') ?: null;
+        $csService = $request->integer('cs_service') ?: null;
+
+        $clinicalVisits = $patient->appointments()
+            ->where(fn ($q) => $q->whereHas('finding')->orWhereHas('recommendations', $acceptedRec))
+            ->when($csDentist, fn ($q) => $q->where('dentist_id', $csDentist))
+            ->when($csService, fn ($q) => $q->whereHas('procedures', fn ($p) => $p->where('service_id', $csService)))
+            ->with([
+                'dentist', 'finding',
+                'procedures' => fn ($p) => $p->where('status', \App\Enums\ProcedureStatus::Performed->value),
+                'recommendations' => fn ($r) => $acceptedRec($r)->latest('accepted_at'),
+            ])
+            ->latest('scheduled_at')
+            ->paginate(3, ['*'], 'summary')
+            ->withQueryString();
+
+        // Filter options scoped to this patient's own history.
+        $csDentists = User::whereIn('id', $patient->appointments()->whereNotNull('dentist_id')->distinct()->pluck('dentist_id'))
+            ->orderBy('name')->get(['id', 'name']);
+        $csServices = Service::whereIn('id', $patient->appointments()->whereNotNull('service_id')->distinct()->pluck('service_id'))
+            ->orderBy('name')->get(['id', 'name']);
+
+        // Odontogram: latest state per tooth + per-tooth timeline across all visits.
+        $patientTeeth = \App\Models\ToothRecord::whereHas('appointment', fn ($q) => $q->where('patient_id', $patient->id))
+            ->with('recorder')->get();
 
         return view('clinic.patients.show', [
             'patient' => $patient,
             'appointments' => $appointments,
-            'dentists' => User::where('role', UserRole::Dentist)->orderBy('name')->get(),
-            'services' => Service::active()->orderBy('name')->get(),
-            'suggestions' => $suggestions,
+            'apptStatus' => $apptStatus,
+            'apptStatuses' => AppointmentStatus::options(),
+            'clinicalVisits' => $clinicalVisits,
+            'csDentist' => $csDentist,
+            'csService' => $csService,
+            'csDentists' => $csDentists,
+            'csServices' => $csServices,
+            'teeth' => \App\Models\ToothRecord::chartArray($patientTeeth),
+            'teethHistory' => \App\Models\ToothRecord::historyArray($patientTeeth),
         ]);
     }
 

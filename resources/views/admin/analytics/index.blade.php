@@ -10,6 +10,8 @@
 @endphp
 
 @section('content')
+  {{-- Async: the filter + pagination swap just this block; charts redraw on htmx:afterSettle. --}}
+  <div id="analytics" hx-boost="true" hx-target="#analytics" hx-select="#analytics" hx-swap="outerHTML" hx-push-url="true">
     {{-- ============ FILTER BAR (drives every report below) ============ --}}
     <form method="GET" action="{{ route('admin.analytics') }}"
           class="rounded-2xl bg-white border border-slate-200/60 p-4 shadow-soft">
@@ -118,6 +120,80 @@
             <div class="text-xs uppercase tracking-wider text-slate-400">No-show / cancel</div>
             <div class="mt-1 font-display text-3xl font-bold text-slate-700">{{ $kpis['noShowRate'] }}% <span class="text-lg text-slate-400">/ {{ $kpis['cancellationRate'] }}%</span></div>
             <div class="text-xs text-slate-400 mt-1">of all appointments</div>
+        </div>
+    </div>
+
+    {{-- ============ DECISION-TREE SCHEDULING KPIs ============ --}}
+    <div class="mt-8">
+        <div class="flex items-center gap-2 mb-3">
+            <h3 class="font-display text-lg font-bold">Scheduling insights</h3>
+            <span class="text-xs text-slate-400">· Decision Tree · {{ $filter->from->format('M j') }}–{{ $filter->to->format('M j, Y') }}</span>
+        </div>
+
+        <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div class="rounded-2xl bg-white border border-slate-200/60 p-5 shadow-soft">
+                <div class="text-xs uppercase tracking-wider text-slate-400">Busiest day</div>
+                <div class="mt-1 font-display text-2xl font-bold">{{ $insights['busiestDay']['label'] ?? '—' }}</div>
+                <div class="text-xs text-slate-400 mt-1">{{ $insights['busiestDay']['count'] ?? 0 }} appointments</div>
+            </div>
+            <div class="rounded-2xl bg-white border border-slate-200/60 p-5 shadow-soft">
+                <div class="text-xs uppercase tracking-wider text-slate-400">Peak hour</div>
+                <div class="mt-1 font-display text-2xl font-bold">{{ $insights['peakHour']['label'] ?? '—' }}</div>
+                <div class="text-xs text-slate-400 mt-1">{{ $insights['peakHour']['count'] ?? 0 }} bookings</div>
+            </div>
+            <div class="rounded-2xl bg-white border border-slate-200/60 p-5 shadow-soft">
+                <div class="text-xs uppercase tracking-wider text-slate-400">No-show risk</div>
+                <div class="mt-1 font-display text-2xl font-bold text-amber-600">{{ $insights['noShowPct'] }}%</div>
+                <div class="text-xs text-slate-400 mt-1">missed / cancelled</div>
+            </div>
+            <div class="rounded-2xl bg-white border border-red-200/60 p-5 shadow-soft">
+                <div class="text-xs uppercase tracking-wider text-slate-400">Est. lost revenue</div>
+                <div class="mt-1 font-display text-2xl font-bold text-red-500">₱{{ number_format($insights['lostRevenue'], 2) }}</div>
+                <div class="text-xs text-slate-400 mt-1">from {{ $insights['missed'] }} cancelled / no-show</div>
+            </div>
+            <div class="rounded-2xl bg-white border border-slate-200/60 p-5 shadow-soft">
+                <div class="text-xs uppercase tracking-wider text-slate-400">Schedule efficiency</div>
+                <div class="mt-1 font-display text-2xl font-bold text-brand-blue">{{ $insights['efficiency'] }}%</div>
+                <div class="text-xs text-slate-400 mt-1">of chair time used</div>
+            </div>
+            <div class="rounded-2xl bg-white border border-slate-200/60 p-5 shadow-soft">
+                <div class="text-xs uppercase tracking-wider text-slate-400">Highest workload</div>
+                <div class="mt-1 font-display text-xl font-bold">{{ $insights['topDentist']['name'] ?? '—' }}</div>
+                <div class="text-xs text-slate-400 mt-1">{{ $insights['topDentist']['count'] ?? 0 }} visits · {{ $insights['topDentist']['hours'] ?? 0 }} h</div>
+            </div>
+            <div class="rounded-2xl bg-white border border-slate-200/60 p-5 shadow-soft">
+                <div class="text-xs uppercase tracking-wider text-slate-400">Most underused slot</div>
+                <div class="mt-1 font-display text-xl font-bold">{{ $insights['underused']['label'] ?? '—' }}</div>
+                <div class="text-xs text-slate-400 mt-1">{{ $insights['underused']['count'] ?? 0 }} bookings — promote it</div>
+            </div>
+            <div class="rounded-2xl bg-white border border-slate-200/60 p-5 shadow-soft">
+                <div class="text-xs uppercase tracking-wider text-slate-400">Most booked procedure</div>
+                <div class="mt-1 font-display text-xl font-bold">{{ $insights['topProcedure']['name'] ?? '—' }}</div>
+                <div class="text-xs text-slate-400 mt-1">{{ $insights['topProcedure']['count'] ?? 0 }} times</div>
+            </div>
+            <div class="rounded-2xl bg-white border border-slate-200/60 p-5 shadow-soft">
+                <div class="text-xs uppercase tracking-wider text-slate-400">Appointments in range</div>
+                <div class="mt-1 font-display text-2xl font-bold">{{ number_format($insights['total']) }}</div>
+                <div class="text-xs text-slate-400 mt-1">all statuses</div>
+            </div>
+        </div>
+
+        {{-- Demand bars (weekday + hour) --}}
+        <div class="mt-4 grid lg:grid-cols-2 gap-4">
+            @foreach ([['Demand by day', $insights['byDay']], ['Demand by hour', $insights['byHour']]] as [$title, $ds])
+                @php $maxC = max(1, max($ds['counts'] ?: [0])); @endphp
+                <div class="rounded-2xl bg-white border border-slate-200/60 p-5 shadow-soft">
+                    <div class="text-xs uppercase tracking-wider text-slate-400 mb-3">{{ $title }}</div>
+                    <div class="flex items-end gap-1.5 h-32">
+                        @foreach ($ds['counts'] as $idx => $count)
+                            <div class="flex-1 flex flex-col items-center justify-end h-full">
+                                <div class="w-full rounded-t bg-brand-blue/70" style="height: {{ $count > 0 ? max(4, round($count / $maxC * 100)) : 1 }}%" title="{{ $count }}"></div>
+                                <div class="text-[9px] text-slate-400 mt-1 truncate w-full text-center">{{ $ds['labels'][$idx] }}</div>
+                            </div>
+                        @endforeach
+                    </div>
+                </div>
+            @endforeach
         </div>
     </div>
 
@@ -302,9 +378,9 @@
         <div class="flex items-center justify-between mb-3">
             <h3 class="font-display text-lg font-bold">Appointments ({{ $appointments->total() }})</h3>
             <div class="flex gap-2">
-                <a href="{{ route('admin.analytics.export', array_merge($filter->toQuery(), ['format' => 'csv'])) }}"
+                <a href="{{ route('admin.analytics.export', array_merge($filter->toQuery(), ['format' => 'csv'])) }}" hx-boost="false"
                    class="h-9 px-3 inline-flex items-center rounded-lg border border-slate-200 text-sm font-medium text-slate-600 hover:bg-slate-50 transition">Export CSV</a>
-                <a href="{{ route('admin.analytics.export', array_merge($filter->toQuery(), ['format' => 'xlsx'])) }}"
+                <a href="{{ route('admin.analytics.export', array_merge($filter->toQuery(), ['format' => 'xlsx'])) }}" hx-boost="false"
                    class="h-9 px-3 inline-flex items-center rounded-lg bg-brand-green/10 text-emerald-700 text-sm font-medium hover:bg-brand-green/20 transition">Export Excel</a>
             </div>
         </div>
@@ -337,29 +413,57 @@
         </div>
         <div class="mt-4">{{ $appointments->links() }}</div>
     </div>
+
+    {{-- Chart data island — swapped in with new values on every async filter/pagination
+         change; the renderer (footer) reads this and redraws on htmx:afterSettle. --}}
+    @php
+        $analyticsData = [
+            'isMoney' => $isMoney,
+            'measure' => $filter->measure,
+            'measureLabel' => $measureLabel,
+            'series' => $series,
+            'aggregate' => $aggregate,
+            'categoryMix' => $categoryMix,
+            'serviceRevenue' => $serviceRevenue,
+            'paymentMix' => $paymentMix,
+            'segments' => $segments,
+        ];
+    @endphp
+    <script type="application/json" id="analytics-data">{!! json_encode($analyticsData) !!}</script>
+  </div>
 @endsection
 
 @push('scripts')
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 <script>
 (function () {
-    const peso = (v) => '₱' + Number(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    const isMoney = @json($isMoney);
-    const fmtMeasure = (v) => isMoney ? peso(v) : Number(v).toLocaleString();
+    function draw() {
+        const el = document.getElementById('analytics-data');
+        if (!el || !window.Chart) return;
+        const d = JSON.parse(el.textContent);
 
-    const series = @json($series);
-    const agg = @json($aggregate);
-    const measure = @json($filter->measure);
-    const categoryMix = @json($categoryMix);
-    const serviceRevenue = @json($serviceRevenue);
-    const paymentMix = @json($paymentMix);
-    const segments = @json($segments);
+        // Destroy charts from a previous render so canvases (swapped fresh) don't leak.
+        (window._acharts || []).forEach(c => { try { c.destroy(); } catch (e) {} });
+        window._acharts = [];
+        const reg = (c) => { window._acharts.push(c); return c; };
 
-    const grid = { grid: { color: 'rgba(0,0,0,0.05)' } };
+        const peso = (v) => '₱' + Number(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        const isMoney = d.isMoney;
+        const fmtMeasure = (v) => isMoney ? peso(v) : Number(v).toLocaleString();
+
+        const series = d.series;
+        const agg = d.aggregate;
+        const measure = d.measure;
+        const categoryMix = d.categoryMix;
+        const serviceRevenue = d.serviceRevenue;
+        const paymentMix = d.paymentMix;
+        const segments = d.segments;
+
+        const grid = { grid: { color: 'rgba(0,0,0,0.05)' } };
 
     // 1) Trend (collected revenue + appointment count, dual axis)
     const trend = document.getElementById('trendChart');
-    if (trend) new Chart(trend, {
+    if (trend) reg(new Chart(trend, {
         data: {
             labels: series.map(s => s.period),
             datasets: [
@@ -371,11 +475,11 @@
         },
         options: { responsive: true, interaction: { mode: 'index', intersect: false },
             scales: { y: { position: 'left', ticks: { callback: peso }, ...grid }, y1: { position: 'right', grid: { drawOnChartArea: false } } } },
-    });
+    }));
 
     // 2) Status mix (stacked bar over time)
     const status = document.getElementById('statusChart');
-    if (status) new Chart(status, {
+    if (status) reg(new Chart(status, {
         type: 'bar',
         data: {
             labels: series.map(s => s.period),
@@ -387,48 +491,48 @@
             ],
         },
         options: { responsive: true, scales: { x: { stacked: true }, y: { stacked: true, ...grid } } },
-    });
+    }));
 
     // 3) Aggregation by chosen dimension (bar)
     const aggEl = document.getElementById('aggChart');
-    if (aggEl) new Chart(aggEl, {
+    if (aggEl) reg(new Chart(aggEl, {
         type: 'bar',
         data: { labels: agg.map(a => a.label),
-            datasets: [{ label: @json($measureLabel), data: agg.map(a => a[measure]), backgroundColor: '#3B82F6' }] },
+            datasets: [{ label: d.measureLabel, data: agg.map(a => a[measure]), backgroundColor: '#3B82F6' }] },
         options: { responsive: true, plugins: { legend: { display: false } },
             scales: { y: { ticks: { callback: (v) => fmtMeasure(v) }, ...grid } } },
-    });
+    }));
 
     // 3b) Revenue by dental service (bar, from line items)
     const svcEl = document.getElementById('serviceRevenueChart');
-    if (svcEl) new Chart(svcEl, {
+    if (svcEl) reg(new Chart(svcEl, {
         type: 'bar',
         data: { labels: serviceRevenue.map(s => s.label),
             datasets: [{ label: 'Revenue (₱)', data: serviceRevenue.map(s => s.revenue), backgroundColor: '#10B981' }] },
         options: { responsive: true, plugins: { legend: { display: false },
             tooltip: { callbacks: { label: (c) => peso(c.parsed.y) } } },
             scales: { y: { ticks: { callback: peso }, ...grid } } },
-    });
+    }));
 
     // 4) Category donut (line-item revenue)
     const catEl = document.getElementById('categoryChart');
-    if (catEl) new Chart(catEl, {
+    if (catEl) reg(new Chart(catEl, {
         type: 'doughnut',
         data: { labels: categoryMix.map(c => c.label),
             datasets: [{ data: categoryMix.map(c => c.revenue),
                 backgroundColor: ['#10B981','#3B82F6','#A855F7','#EF4444','#F59E0B','#94A3B8'] }] },
         options: { responsive: true, plugins: { tooltip: { callbacks: { label: (c) => c.label + ': ' + peso(c.parsed) } } } },
-    });
+    }));
 
     // 5) Payment method donut
     const payEl = document.getElementById('paymentChart');
-    if (payEl) new Chart(payEl, {
+    if (payEl) reg(new Chart(payEl, {
         type: 'doughnut',
         data: { labels: paymentMix.map(p => p.label),
             datasets: [{ data: paymentMix.map(p => p.total),
                 backgroundColor: ['#3B82F6','#10B981','#A855F7','#F59E0B','#94A3B8'] }] },
         options: { responsive: true, plugins: { tooltip: { callbacks: { label: (c) => c.label + ': ' + peso(c.parsed) } } } },
-    });
+    }));
 
     // 6) Clustering scatter (x = visits, y = spend, colour = segment)
     const clEl = document.getElementById('clusterChart');
@@ -438,7 +542,7 @@
         segments.points.forEach(p => { (byCluster[p.cluster] = byCluster[p.cluster] || []).push({ x: p.x, y: p.y }); });
         const names = {};
         segments.summary.forEach(s => names[s.cluster] = s.name);
-        new Chart(clEl, {
+        reg(new Chart(clEl, {
             type: 'scatter',
             data: { datasets: Object.keys(byCluster).map(c => ({
                 label: names[c] || ('Segment ' + c), data: byCluster[c], backgroundColor: palette[c % palette.length],
@@ -447,8 +551,13 @@
                 scales: { x: { title: { display: true, text: 'Visits (frequency)' }, ...grid },
                           y: { title: { display: true, text: 'Spend (₱)' }, ticks: { callback: peso }, ...grid } },
                 plugins: { tooltip: { callbacks: { label: (c) => c.dataset.label + ': ' + c.parsed.x + ' visits, ' + peso(c.parsed.y) } } } },
-        });
+        }));
     }
+    }
+
+    // Initial draw + redraw after each async (htmx) swap of the analytics block.
+    if (document.readyState !== 'loading') draw(); else document.addEventListener('DOMContentLoaded', draw);
+    document.body.addEventListener('htmx:afterSettle', draw);
 })();
 </script>
 @endpush

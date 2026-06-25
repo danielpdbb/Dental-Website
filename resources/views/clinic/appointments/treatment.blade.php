@@ -7,6 +7,8 @@
     use App\Enums\AppointmentStatus;
     use App\Enums\ProcedureStatus;
     $open = ! in_array($appointment->status, [AppointmentStatus::ForBilling, AppointmentStatus::Billed, AppointmentStatus::Completed, AppointmentStatus::Cancelled, AppointmentStatus::NoShow], true);
+    $canEdit = $canEdit ?? true;        // is this the assigned dentist / management?
+    $editable = $open && $canEdit;      // may write to this visit
     $performedCount = $appointment->procedures->where('status', ProcedureStatus::Performed)->count();
 @endphp
 
@@ -25,11 +27,66 @@
                     <span class="px-3 py-1 rounded-full text-xs font-medium {{ $appointment->status->badgeClasses() }}">{{ $appointment->status->label() }}</span>
                 </div>
 
-                @unless ($open)
+                @if (! $canEdit)
+                    <div class="mt-4 rounded-xl bg-slate-50 border border-slate-200 text-slate-600 text-sm px-4 py-3">
+                        Read-only view — this visit is handled by {{ $appointment->dentist?->name ?? 'another dentist' }}. You can review the record but not edit it.
+                    </div>
+                @elseif (! $open)
                     <div class="mt-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-700 text-sm px-4 py-3">
                         This session has been endorsed/billed and is read-only.
                     </div>
-                @endunless
+                @endif
+            </div>
+
+            {{-- Stage 1: pre-visit assessment + possible current treatment --}}
+            <div class="rounded-2xl bg-white border border-slate-200/60 p-6 shadow-soft">
+                <h3 class="font-display text-lg font-bold mb-1">Pre-visit assessment</h3>
+                <p class="text-xs text-slate-400 mb-4">The patient&rsquo;s answers and the AI&rsquo;s possible current treatment — to help you prepare. You make the final decision.</p>
+
+                @if ($appointment->intake)
+                    <div class="grid sm:grid-cols-2 gap-x-6 gap-y-1.5 text-sm">
+                        <div class="flex justify-between"><span class="text-slate-500">Main concern</span><span class="font-medium">{{ $appointment->intake->main_concern ?? '—' }}</span></div>
+                        <div class="flex justify-between"><span class="text-slate-500">Pain level</span><span class="font-medium">{{ $appointment->intake->pain_level }}/10</span></div>
+                        <div class="flex justify-between"><span class="text-slate-500">Brushing/day</span><span class="font-medium">{{ $appointment->intake->brushing_per_day }}</span></div>
+                        <div class="flex justify-between"><span class="text-slate-500">Months since cleaning</span><span class="font-medium">{{ $appointment->intake->months_since_cleaning }}</span></div>
+                    </div>
+                    <div class="mt-3 flex flex-wrap gap-1.5">
+                        @foreach (['toothache' => 'Toothache', 'sensitivity' => 'Sensitivity', 'bleeding_gums' => 'Bleeding gums', 'bad_breath' => 'Bad breath', 'swelling' => 'Swelling', 'smoker' => 'Smoker'] as $f => $lbl)
+                            @if ($appointment->intake->$f)
+                                <span class="px-2 py-0.5 rounded-full text-xs bg-amber-100 text-amber-700">{{ $lbl }}</span>
+                            @endif
+                        @endforeach
+                    </div>
+
+                    @if ($stage1)
+                        <div class="mt-4 rounded-xl border border-brand-blue/30 bg-brand-blue/5 p-4">
+                            <div class="text-xs text-brand-blue font-medium">AI suggestion — possible current treatment <span class="text-slate-400 font-normal">(staff only)</span></div>
+                            <div class="font-semibold mt-1">{{ $stage1->recommendation }}</div>
+                            @if ($stage1->confidence !== null)<div class="text-xs text-slate-500 mt-0.5">Confidence {{ round($stage1->confidence * 100) }}%</div>@endif
+                            @if ($editable && $stage1->linked_service_id && ! $appointment->procedures->contains('service_id', $stage1->linked_service_id))
+                                <form method="POST" action="{{ route('appointments.pre-visit.add', [$appointment, $stage1]) }}" class="mt-2">
+                                    @csrf
+                                    <button class="h-9 px-3 rounded-lg bg-brand-blue text-white text-xs font-medium hover:opacity-90">+ Add suggested treatment to this visit</button>
+                                </form>
+                            @endif
+                        </div>
+                    @endif
+
+                    {{-- Dentist/management may revise the assessment on initial diagnosis. --}}
+                    @if ($editable)
+                        <details class="mt-3">
+                            <summary class="cursor-pointer text-sm text-brand-blue hover:underline list-none">Edit assessment</summary>
+                            <p class="text-xs text-slate-400 mt-2">Adjust the answers from your initial diagnosis — the suggestion will be regenerated.</p>
+                            @include('clinic.appointments._intake-form', ['appointment' => $appointment])
+                        </details>
+                    @endif
+                @else
+                    <p class="text-sm text-slate-400">The patient hasn&rsquo;t filled the pre-visit assessment.</p>
+                    <details class="mt-2">
+                        <summary class="cursor-pointer text-sm text-brand-blue hover:underline list-none">Fill it on their behalf</summary>
+                        @include('clinic.appointments._intake-form', ['appointment' => $appointment])
+                    </details>
+                @endif
             </div>
 
             {{-- Procedures (current treatment) --}}
@@ -50,7 +107,7 @@
                             </div>
                             <div class="flex items-center gap-2 shrink-0">
                                 <span class="px-2 py-0.5 rounded-full text-xs font-medium {{ $proc->status->badgeClasses() }}">{{ $proc->status->label() }}</span>
-                                @if ($open)
+                                @if ($editable)
                                     <form method="POST" action="{{ route('clinic.appointments.treatment.toggle', [$appointment, $proc]) }}">
                                         @csrf @method('PATCH')
                                         <button class="text-xs font-medium {{ $proc->isPerformed() ? 'text-slate-500 hover:underline' : 'text-emerald-600 hover:underline' }}">
@@ -69,7 +126,7 @@
                     @endforelse
                 </div>
 
-                @if ($open)
+                @if ($editable)
                     <form method="POST" action="{{ route('clinic.appointments.treatment.add', $appointment) }}" class="mt-4 flex flex-wrap items-end gap-2">
                         @csrf
                         <div class="flex-1 min-w-[12rem]">
@@ -86,6 +143,91 @@
                     </form>
                 @endif
             </div>
+
+            {{-- Interactive dental chart --}}
+            <div class="rounded-2xl bg-white border border-slate-200/60 p-6 shadow-soft">
+                <h3 class="font-display text-lg font-bold mb-1">Dental chart</h3>
+                <p class="text-xs text-slate-400 mb-4">Click a tooth to record its condition, treatment done, medicine given and observations.</p>
+                @include('partials.teeth-chart', [
+                    'chartMode' => $editable ? 'edit' : 'view',
+                    'chartId' => 'tooth-rx',
+                    'records' => $teethRecords,
+                    'historyByFdi' => $teethHistory,
+                    'saveUrl' => $editable ? route('clinic.appointments.teeth.store', $appointment) : null,
+                ])
+            </div>
+
+            {{-- Stage 2: clinical findings → next-visit recommendation --}}
+            <div class="rounded-2xl bg-white border border-slate-200/60 p-6 shadow-soft">
+                <h3 class="font-display text-lg font-bold mb-1">Clinical findings &amp; next visit</h3>
+                <p class="text-xs text-slate-400 mb-4">Record what you observed; the system suggests the recommended next visit for you to verify.</p>
+
+                @php $f = $appointment->finding; @endphp
+                @if (! $editable)
+                    @if ($f)
+                        <div class="grid sm:grid-cols-2 gap-x-6 gap-y-1.5 text-sm">
+                            <div class="flex justify-between"><span class="text-slate-500">Cavity found</span><span class="font-medium">{{ $f->cavity_found ? 'Yes' : 'No' }}</span></div>
+                            <div class="flex justify-between"><span class="text-slate-500">Gum inflammation</span><span class="font-medium">{{ ucfirst($f->gum_inflammation) }}</span></div>
+                            <div class="flex justify-between"><span class="text-slate-500">Plaque level</span><span class="font-medium">{{ ucfirst($f->plaque_level) }}</span></div>
+                            <div class="flex justify-between"><span class="text-slate-500">Infection signs</span><span class="font-medium">{{ ucfirst($f->infection_signs) }}</span></div>
+                            <div class="flex justify-between"><span class="text-slate-500">X-ray needed</span><span class="font-medium">{{ $f->xray_needed ? 'Yes' : 'No' }}</span></div>
+                            @if ($f->treatment_done_today)<div class="flex justify-between"><span class="text-slate-500">Treatment today</span><span class="font-medium">{{ $f->treatment_done_today }}</span></div>@endif
+                        </div>
+                        @if ($f->remarks)<p class="mt-2 text-sm text-slate-500">{{ $f->remarks }}</p>@endif
+                    @else
+                        <p class="text-sm text-slate-400">No clinical findings recorded for this visit.</p>
+                    @endif
+                @else
+                <form method="POST" action="{{ route('clinic.appointments.findings.save', $appointment) }}" class="grid sm:grid-cols-2 gap-3 text-sm">
+                    @csrf
+                    <label class="flex items-center gap-2"><input type="checkbox" name="cavity_found" value="1" @checked($f?->cavity_found) class="rounded border-slate-300"> Cavity found</label>
+                    <label class="flex items-center gap-2"><input type="checkbox" name="tooth_mobility" value="1" @checked($f?->tooth_mobility) class="rounded border-slate-300"> Tooth mobility</label>
+                    <label class="flex items-center gap-2"><input type="checkbox" name="xray_needed" value="1" @checked($f?->xray_needed) class="rounded border-slate-300"> X-ray needed</label>
+                    <div></div>
+                    <div>
+                        <label class="block text-xs text-slate-500 mb-1">Gum inflammation</label>
+                        <select name="gum_inflammation" class="w-full h-9 px-2 rounded-lg border border-slate-200">
+                            @foreach (['none' => 'None', 'mild' => 'Mild', 'moderate' => 'Moderate', 'severe' => 'Severe'] as $v => $l)
+                                <option value="{{ $v }}" @selected(($f?->gum_inflammation ?? 'none') === $v)>{{ $l }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs text-slate-500 mb-1">Plaque level</label>
+                        <select name="plaque_level" class="w-full h-9 px-2 rounded-lg border border-slate-200">
+                            @foreach (['low' => 'Low', 'medium' => 'Medium', 'high' => 'High'] as $v => $l)
+                                <option value="{{ $v }}" @selected(($f?->plaque_level ?? 'low') === $v)>{{ $l }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs text-slate-500 mb-1">Infection signs</label>
+                        <select name="infection_signs" class="w-full h-9 px-2 rounded-lg border border-slate-200">
+                            @foreach (['none' => 'None', 'possible' => 'Possible', 'present' => 'Present'] as $v => $l)
+                                <option value="{{ $v }}" @selected(($f?->infection_signs ?? 'none') === $v)>{{ $l }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs text-slate-500 mb-1">Treatment done today</label>
+                        <input type="text" name="treatment_done_today" value="{{ $f?->treatment_done_today }}" class="w-full h-9 px-2 rounded-lg border border-slate-200" placeholder="e.g. Temporary filling" />
+                    </div>
+                    <div class="sm:col-span-2">
+                        <label class="block text-xs text-slate-500 mb-1">Dentist remarks</label>
+                        <textarea name="remarks" rows="2" class="w-full px-2 py-1.5 rounded-lg border border-slate-200">{{ $f?->remarks }}</textarea>
+                    </div>
+                    <div class="sm:col-span-2">
+                        <button class="h-10 px-4 rounded-lg bg-slate-800 text-white text-sm font-medium hover:bg-slate-700 transition">Save findings &amp; generate next-visit suggestion</button>
+                    </div>
+                </form>
+                @endif
+
+                @if ($stage2)
+                    <div class="mt-5">
+                        @include('clinic.appointments._recommendation-review', ['rec' => $stage2, 'canEdit' => $canEdit])
+                    </div>
+                @endif
+            </div>
         </div>
 
         {{-- Endorse --}}
@@ -97,7 +239,7 @@
                 <div class="flex justify-between border-t border-slate-100 pt-1.5 mt-1"><span class="text-slate-500">Total</span><span class="font-display font-bold">₱{{ number_format($appointment->total_amount, 2) }}</span></div>
             </div>
 
-            @if ($open)
+            @if ($editable)
                 <form method="POST" action="{{ route('clinic.appointments.treatment.endorse', $appointment) }}" class="mt-4" data-confirm="Endorse this session to reception for billing?">
                     @csrf
                     <button class="w-full h-11 rounded-xl gradient-brand text-white font-semibold shadow-brand hover:opacity-90 transition disabled:opacity-50" {{ $performedCount === 0 ? 'disabled' : '' }}>
@@ -107,7 +249,7 @@
                 @if ($performedCount === 0)
                     <p class="mt-2 text-xs text-slate-400">Mark at least one procedure performed to endorse.</p>
                 @endif
-            @else
+            @elseif (! $open)
                 <p class="mt-4 text-sm text-emerald-600 font-medium">✓ Already endorsed</p>
             @endif
         </div>

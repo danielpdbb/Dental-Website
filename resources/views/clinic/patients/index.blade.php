@@ -4,11 +4,12 @@
 @section('heading', 'Patient records')
 
 @section('content')
+  <div id="patients-list" hx-boost="true" hx-target="#patients-list" hx-select="#patients-list" hx-swap="outerHTML" hx-push-url="true">
     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-5">
         <form method="GET" action="{{ route('clinic.patients.index') }}" class="flex flex-wrap gap-2">
             <input type="text" name="search" value="{{ $filters['search'] ?? '' }}" placeholder="Search name or phone"
                 class="h-10 px-4 rounded-lg border border-slate-200 text-sm focus:border-brand-blue focus:ring-2 focus:ring-brand-blue/20 outline-none w-64" />
-            <select name="account" class="h-10 px-3 rounded-lg border border-slate-200 text-sm outline-none focus:border-brand-blue">
+            <select name="account" onchange="this.form.requestSubmit()" class="h-10 px-3 rounded-lg border border-slate-200 text-sm outline-none focus:border-brand-blue">
                 <option value="">All patients</option>
                 <option value="registered" @selected(($filters['account'] ?? '') === 'registered')>With account</option>
                 <option value="walkin" @selected(($filters['account'] ?? '') === 'walkin')>Walk-in (no login)</option>
@@ -16,7 +17,7 @@
             <button type="submit" class="h-10 px-4 rounded-lg bg-slate-800 text-white text-sm font-medium hover:bg-slate-700 transition">Filter</button>
         </form>
 
-        <a href="{{ route('clinic.patients.create') }}"
+        <a href="{{ route('clinic.patients.create') }}" hx-boost="false"
             class="h-10 px-4 inline-flex items-center gap-2 rounded-lg gradient-brand text-white text-sm font-semibold shadow-brand hover:opacity-90 transition">
             <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
             New patient
@@ -57,7 +58,7 @@
                             @endif
                         </td>
                         <td class="px-5 py-3 text-right">
-                            <a href="{{ route('clinic.patients.show', $patient) }}" class="text-brand-blue hover:underline">View</a>
+                            <a href="{{ route('clinic.patients.show', $patient) }}" hx-boost="false" class="text-brand-blue hover:underline">View</a>
                         </td>
                     </tr>
                 @empty
@@ -68,4 +69,5 @@
     </div>
 
     <div class="mt-4">{{ $patients->links() }}</div>
+  </div>
 @endsection

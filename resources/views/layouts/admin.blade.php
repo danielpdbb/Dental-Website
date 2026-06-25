@@ -97,6 +97,7 @@
             <header class="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6">
                 <h1 class="font-display text-lg font-bold">@yield('heading', 'Dashboard')</h1>
                 <div class="flex items-center gap-4">
+                    @include('partials.notification-bell')
                     <a href="{{ route('profile.edit') }}" class="flex items-center gap-2 hover:opacity-80 transition" title="My profile">
                         @include('partials.avatar', ['user' => auth()->user(), 'size' => 'h-8 w-8 text-xs'])
                         <span class="text-sm text-slate-600 hidden sm:block">{{ auth()->user()->name }}</span>
@@ -128,6 +129,9 @@
     @include('partials.confirm-modal')
     @include('partials.review-modal')
     @include('partials.select')
+
+    {{-- htmx — powers async pagination/filtering (swaps just the list, no full reload) --}}
+    <script src="https://unpkg.com/htmx.org@2.0.3"></script>
 
     @stack('scripts')
 </body>

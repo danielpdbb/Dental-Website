@@ -12,5 +12,11 @@ Artisan::command('inspire', function () {
 // running in production: `php artisan schedule:work` or a real cron entry).
 Schedule::command('rewards:expire')->dailyAt('02:00');
 
+// Close past-dated, still-booked appointments as no-show each morning.
+Schedule::command('appointments:close-stale')->dailyAt('01:00');
+
+// Remind patients about tomorrow's appointments (bell + email).
+Schedule::command('appointments:send-reminders')->dailyAt('08:00');
+
 // Retrain the predictive-scheduling Decision Tree monthly on the latest history.
 Schedule::command('ml:scheduling:train')->monthlyOn(1, '03:00');

@@ -3,14 +3,18 @@
 namespace App\Http\Controllers\Portal;
 
 use App\Enums\AppointmentStatus;
+use App\Enums\RecommendationSource;
 use App\Enums\UserRole;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Appointment\BookAppointmentRequest;
 use App\Models\Appointment;
+use App\Models\AppointmentRecommendation;
+use App\Models\Patient;
 use App\Models\Service;
 use App\Models\User;
 use App\Services\PredictiveScheduler;
 use App\Services\RewardService;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -22,25 +26,83 @@ class AppointmentController extends Controller
     {
         $patient = RecordController::resolvePatient($request->user());
 
+        $pastStatus = $request->string('past_status')->toString();
+        $pastStatus = in_array($pastStatus, ['completed', 'cancelled', 'no_show'], true) ? $pastStatus : null;
+
         return view('portal.appointments.index', [
             // Active = anything not yet finished (booked → billed) so a Billed visit
             // always shows here with its pay options; History = terminal states.
+            // Active = not finished AND (still in the future OR already in the billing
+            // pipeline). A past-dated visit that's still only "booked" was never
+            // processed, so it drops to Past instead of lingering as "upcoming".
             'upcoming' => $patient->appointments()
                 ->whereNotIn('status', ['completed', 'cancelled', 'no_show'])
-                ->with(['service', 'dentist', 'payments', 'procedures'])->orderBy('scheduled_at')->get(),
+                ->where(function ($q) {
+                    $q->where('scheduled_at', '>=', now()->startOfDay())
+                        ->orWhereIn('status', ['in_treatment', 'for_billing', 'billed']);
+                })
+                ->with(['service', 'dentist', 'payments', 'procedures', 'intake', 'recommendations.service', 'billingStatement.items'])
+                ->orderBy('scheduled_at')->get(),
             'past' => $patient->appointments()
-                ->whereIn('status', ['completed', 'cancelled', 'no_show'])
-                ->with(['service', 'dentist', 'payments', 'procedures'])->latest('scheduled_at')
+                ->where(function ($q) {
+                    $q->whereIn('status', ['completed', 'cancelled', 'no_show'])
+                        ->orWhere(fn ($q2) => $q2->where('status', 'booked')->where('scheduled_at', '<', now()->startOfDay()));
+                })
+                ->when($pastStatus, fn ($q) => $q->where('status', $pastStatus))
+                ->with(['service', 'dentist', 'payments', 'procedures', 'billingStatement.items'])->latest('scheduled_at')
                 ->paginate(8, ['*'], 'past')->withQueryString(),
+            'pastStatus' => $pastStatus,
             'outstanding' => $patient->appointments()->where('status', AppointmentStatus::Billed->value)->with('payments')->get()
                 ->sum(fn ($a) => $a->balance()),
             // Rewards context for the "apply credit" option on each bill.
             'rewardPeso' => $rewards->pesoBalance($request->user()),
             'minRedeemPeso' => $rewards->pesoValue((int) config('rewards.min_redeem_points')),
+            // Dentist-sent next-visit recommendations (with one-tap "Book this").
+            'recommendations' => $this->sentRecommendations($patient),
         ]);
     }
 
-    public function create(Request $request, PredictiveScheduler $scheduler): View
+    /**
+     * Accepted + sent next-visit recommendations for this patient, newest first.
+     */
+    private function sentRecommendations(Patient $patient)
+    {
+        return AppointmentRecommendation::query()
+            ->where('source', RecommendationSource::Stage2Next->value)
+            ->whereNotNull('sent_to_patient_at')
+            // Drop follow-ups whose suggested date has already passed.
+            ->where(fn ($q) => $q->whereNull('suggested_at')->orWhere('suggested_at', '>=', now()))
+            ->whereHas('appointment', fn ($q) => $q->where('patient_id', $patient->id))
+            ->with(['appointment.dentist', 'service'])
+            // Soonest upcoming first; undated ones last.
+            ->orderByRaw('suggested_at IS NULL')
+            ->orderBy('suggested_at')
+            ->take(8)
+            ->get();
+    }
+
+    /**
+     * Printable invoice for the patient's own fully-paid appointment.
+     */
+    public function invoice(Request $request, Appointment $appointment)
+    {
+        $patient = RecordController::resolvePatient($request->user());
+        abort_unless($appointment->patient_id === $patient->id, 403);
+
+        $statement = $appointment->billingStatement;
+        abort_if(! $statement || ! $statement->invoice_no, 404, 'An invoice is available once your bill is fully paid.');
+
+        $appointment->load(['patient', 'dentist', 'payments']);
+        $statement->load('items');
+
+        return Pdf::loadView('clinic.billing.document', [
+            'appointment' => $appointment,
+            'statement' => $statement,
+            'type' => 'invoice',
+        ])->stream('invoice-'.$appointment->id.'.pdf');
+    }
+
+    public function create(Request $request, PredictiveScheduler $scheduler, \App\Services\ML\SchedulingModel $model, \App\Services\ML\AppointmentFeatureExtractor $extractor): View
     {
         $selectedIds = collect($request->input('service_ids', []))
             ->filter()->map(fn ($v) => (int) $v)->values();
@@ -49,7 +111,8 @@ class AppointmentController extends Controller
             ? Service::active()->whereIn('id', $selectedIds)->orderBy('name')->get()
             : collect();
 
-        $dentist = $request->filled('dentist_id') ? User::where('role', UserRole::Dentist)->find($request->integer('dentist_id')) : null;
+        $dentists = User::where('role', UserRole::Dentist)->orderBy('name')->get();
+        $dentist = $request->filled('dentist_id') ? $dentists->firstWhere('id', $request->integer('dentist_id')) : null;
         $date = $request->filled('date') ? Carbon::parse($request->date('date')) : Carbon::today();
 
         $totalDuration = (int) $selected->sum('duration_minutes');
@@ -60,9 +123,15 @@ class AppointmentController extends Controller
             ? $scheduler->daySlots($dentist, max(15, $totalDuration), $date)
             : null;
 
+        // Decision-Tree recommended slot: best predicted-attendance free slot across
+        // dentists. Verified available before it is suggested.
+        $recommended = $selected->isNotEmpty()
+            ? $this->recommendSlot($scheduler, $model, $extractor, $dentists, max(15, $totalDuration), $totalPrice)
+            : null;
+
         return view('portal.appointments.create', [
             'services' => Service::active()->orderBy('name')->get(),
-            'dentists' => User::where('role', UserRole::Dentist)->orderBy('name')->get(),
+            'dentists' => $dentists,
             'selected' => $selected,
             'selectedIds' => $selectedIds->all(),
             'dentist' => $dentist,
@@ -70,7 +139,37 @@ class AppointmentController extends Controller
             'slots' => $slots,
             'totalDuration' => $totalDuration,
             'totalPrice' => $totalPrice,
+            'recommended' => $recommended,
+            // Dentist-sent next-visit recommendations (with one-tap "Book this").
+            'recommendations' => $this->sentRecommendations(RecordController::resolvePatient($request->user())),
         ]);
+    }
+
+    /**
+     * Pick the free slot with the highest predicted attendance across all dentists.
+     *
+     * @return array{dentist: User, time: Carbon, keep: ?float}|null
+     */
+    private function recommendSlot(PredictiveScheduler $scheduler, \App\Services\ML\SchedulingModel $model, \App\Services\ML\AppointmentFeatureExtractor $extractor, $dentists, int $duration, float $price): ?array
+    {
+        $best = null;
+
+        foreach ($dentists as $dentist) {
+            foreach ($scheduler->suggestSlots($dentist, $duration, now(), 3) as $slot) {
+                // Only suggest genuinely free slots.
+                if (! $scheduler->isSlotAvailable($dentist, $slot, $duration)) {
+                    continue;
+                }
+                $keep = $model->keepProbability($extractor->slotVector(null, $slot, $duration, $price));
+                $score = $keep ?? 0.0;
+
+                if (! $best || $score > $best['score'] || ($score === $best['score'] && $slot->lt($best['time']))) {
+                    $best = ['dentist' => $dentist, 'time' => $slot, 'keep' => $keep, 'score' => $score];
+                }
+            }
+        }
+
+        return $best ? ['dentist' => $best['dentist'], 'time' => $best['time'], 'keep' => $best['keep']] : null;
     }
 
     public function store(BookAppointmentRequest $request, PredictiveScheduler $scheduler): RedirectResponse
@@ -97,6 +196,13 @@ class AppointmentController extends Controller
         ]);
 
         $this->attachProcedures($appointment, $services);
+
+        $request->user()->notify(new \App\Notifications\PatientAlert(
+            'Appointment confirmed',
+            'Your appointment with '.$dentist->name.' is booked for '.$start->format('l, M j · g:i A').'.',
+            route('portal.appointments.index'),
+            email: true,
+        ));
 
         return redirect()->route('portal.appointments.index')
             ->with('status', 'Appointment booked for '.$start->format('M j, Y g:i A').'.');

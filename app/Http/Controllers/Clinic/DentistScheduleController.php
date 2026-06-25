@@ -38,7 +38,7 @@ class DentistScheduleController extends Controller
             ? Appointment::where('dentist_id', $dentist->id)
                 ->whereDate('scheduled_at', $date->toDateString())
                 ->where('status', '!=', AppointmentStatus::Cancelled->value)
-                ->with(['patient', 'service', 'procedures'])
+                ->with(['patient', 'service', 'procedures', 'intake', 'recommendations'])
                 ->orderBy('scheduled_at')
                 ->get()
             : collect();

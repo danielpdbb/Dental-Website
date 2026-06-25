@@ -21,13 +21,27 @@ class CurrentTreatmentController extends Controller
 {
     public function edit(Appointment $appointment): View
     {
-        $this->authorize('recordTreatment', $appointment);
+        // Any dentist / management can open a visit read-only; editing is gated below.
+        $this->authorize('viewTreatment', $appointment);
 
-        $appointment->load(['patient', 'procedures.service', 'procedures.performer']);
+        $appointment->load([
+            'patient', 'procedures.service', 'procedures.performer',
+            'intake', 'finding', 'recommendations.service', 'toothRecords.recorder',
+        ]);
+
+        // History of tooth records for THIS patient across all their visits (timeline).
+        $patientToothRecords = \App\Models\ToothRecord::query()
+            ->whereHas('appointment', fn ($q) => $q->where('patient_id', $appointment->patient_id))
+            ->with('recorder')->get();
 
         return view('clinic.appointments.treatment', [
             'appointment' => $appointment,
+            'canEdit' => request()->user()->can('recordTreatment', $appointment),
             'services' => Service::active()->orderBy('name')->get(),
+            'stage1' => $appointment->recommendations->firstWhere('source', \App\Enums\RecommendationSource::Stage1Current),
+            'stage2' => $appointment->recommendations->firstWhere('source', \App\Enums\RecommendationSource::Stage2Next),
+            'teethRecords' => \App\Models\ToothRecord::chartArray($appointment->toothRecords),
+            'teethHistory' => \App\Models\ToothRecord::historyArray($patientToothRecords),
         ]);
     }
 

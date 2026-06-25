@@ -32,10 +32,32 @@
             </div>
         </div>
 
-        <!-- Treatment history (procedures from completed & paid visits) -->
+        <!-- My dental chart -->
         <div class="mt-6 rounded-2xl bg-white border border-slate-200/60 p-6 shadow-soft">
-            <h2 class="font-display text-lg font-bold">Treatment history</h2>
-            <p class="text-xs text-slate-400 mt-0.5">Procedures that have been completed and paid for.</p>
+            <h2 class="font-display text-lg font-bold">My dental chart</h2>
+            <p class="text-xs text-slate-400 mt-0.5 mb-3">The latest recorded condition of each tooth. Tap a tooth to see what was done and its history.</p>
+            @include('partials.teeth-chart', ['chartMode' => 'view', 'chartId' => 'tooth-mine', 'records' => $teeth, 'historyByFdi' => $teethHistory])
+        </div>
+
+        <!-- Treatment history (procedures from completed & paid visits) -->
+        <div id="treatment-history" hx-boost="true" hx-target="#treatment-history" hx-select="#treatment-history" hx-swap="outerHTML" hx-push-url="true"
+             class="mt-6 rounded-2xl bg-white border border-slate-200/60 p-6 shadow-soft">
+            <div class="flex items-start justify-between gap-3">
+                <div>
+                    <h2 class="font-display text-lg font-bold">Treatment history</h2>
+                    <p class="text-xs text-slate-400 mt-0.5">Procedures that have been completed and paid for.</p>
+                </div>
+                @if ($historyServices->isNotEmpty())
+                    <form method="GET" action="{{ route('portal.record') }}">
+                        <select name="service" onchange="this.form.requestSubmit()" class="h-9 px-3 min-w-[14rem] rounded-lg border border-slate-200 text-sm outline-none focus:border-brand-blue">
+                            <option value="">All procedures</option>
+                            @foreach ($historyServices as $hs)
+                                <option value="{{ $hs->service_id }}" @selected((int) $serviceFilter === (int) $hs->service_id)>{{ $hs->procedure_name }}</option>
+                            @endforeach
+                        </select>
+                    </form>
+                @endif
+            </div>
             <div class="mt-3 space-y-3">
                 @forelse ($history as $proc)
                     <div class="flex items-start justify-between gap-4 border-b border-slate-100 pb-3">

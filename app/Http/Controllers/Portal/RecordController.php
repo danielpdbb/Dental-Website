@@ -21,10 +21,35 @@ class RecordController extends Controller
         $patient->load(['allergies', 'treatments.dentist', 'treatments.service',
             'recommendations.dentist', 'recommendations.service']);
 
-        // Treatment history (performed procedures on paid visits) — paginated.
-        $history = $patient->treatmentHistoryQuery()->paginate(8, ['*'], 'history')->withQueryString();
+        // Treatment history (performed procedures on paid visits) — filterable + paginated.
+        $serviceFilter = $request->integer('service') ?: null;
+        $history = $patient->treatmentHistoryQuery()
+            ->when($serviceFilter, fn ($q) => $q->where('service_id', $serviceFilter))
+            ->paginate(8, ['*'], 'history')
+            ->withQueryString();
 
-        return view('portal.record.show', ['patient' => $patient, 'history' => $history]);
+        // Procedures the patient has actually had, for the filter dropdown.
+        $historyServices = \App\Models\AppointmentProcedure::query()
+            ->where('status', \App\Enums\ProcedureStatus::Performed->value)
+            ->whereHas('appointment', fn ($q) => $q->where('patient_id', $patient->id)
+                ->where('status', \App\Enums\AppointmentStatus::Completed->value))
+            ->whereNotNull('service_id')
+            ->groupBy('service_id')
+            ->selectRaw('service_id, MAX(procedure_name) as procedure_name')
+            ->get();
+
+        // Patient's own odontogram — latest condition per tooth + per-tooth history.
+        $patientTeeth = \App\Models\ToothRecord::whereHas('appointment', fn ($q) => $q->where('patient_id', $patient->id))
+            ->with('recorder')->get();
+
+        return view('portal.record.show', [
+            'patient' => $patient,
+            'history' => $history,
+            'historyServices' => $historyServices,
+            'serviceFilter' => $serviceFilter,
+            'teeth' => \App\Models\ToothRecord::chartArray($patientTeeth),
+            'teethHistory' => \App\Models\ToothRecord::historyArray($patientTeeth),
+        ]);
     }
 
     /**

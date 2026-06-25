@@ -21,6 +21,8 @@
             </div>
         @endif
 
+        @include('portal.appointments._recommendations')
+
         <h2 class="font-display text-lg font-bold mt-8">Current &amp; upcoming</h2>
         <div class="mt-3 space-y-3">
             @forelse ($upcoming as $appt)
@@ -45,21 +47,52 @@
                         </div>
                     </div>
                     @include('portal.appointments._pay', ['appt' => $appt])
+
+                    {{-- Stage-1 pre-visit assessment (the AI suggestion it produces is shown
+                         only to the dentist/management, not the patient). --}}
+                    @if (in_array($appt->status->value, ['booked', 'in_treatment'], true))
+                        <div class="mt-3 border-t border-slate-100 pt-3">
+                            <details>
+                                <summary class="cursor-pointer text-sm text-brand-blue hover:underline list-none">
+                                    {{ $appt->intake ? 'Update my pre-visit assessment' : 'Fill the pre-visit assessment' }}
+                                </summary>
+                                <p class="text-xs text-slate-400 mt-2">Answer a few questions so your dentist can prepare. Your dentist will decide the treatment during your visit.</p>
+                                @include('clinic.appointments._intake-form', ['appointment' => $appt])
+                            </details>
+                        </div>
+                    @endif
                 </div>
             @empty
                 <p class="text-sm text-slate-400">No upcoming appointments. <a href="{{ route('portal.appointments.create') }}" class="text-brand-blue hover:underline">Book one →</a></p>
             @endforelse
         </div>
 
-        <h2 class="font-display text-lg font-bold mt-10">Past</h2>
-        <div class="mt-3 space-y-2">
+        <div class="flex items-center justify-between mt-10">
+            <h2 class="font-display text-lg font-bold">Past</h2>
+            <form method="GET" action="{{ route('portal.appointments.index') }}">
+                <select name="past_status" onchange="this.form.submit()" class="h-9 px-3 min-w-[11rem] rounded-lg border border-slate-200 text-sm outline-none focus:border-brand-blue">
+                    <option value="">All</option>
+                    @foreach (['completed' => 'Completed', 'cancelled' => 'Cancelled', 'no_show' => 'No-show'] as $val => $lbl)
+                        <option value="{{ $val }}" @selected(($pastStatus ?? '') === $val)>{{ $lbl }}</option>
+                    @endforeach
+                </select>
+            </form>
+        </div>
+        <div class="mt-3 space-y-3">
             @forelse ($past as $appt)
-                <div class="border-b border-slate-100 py-2">
-                    <div class="flex items-center justify-between text-sm">
-                        <div>{{ $appt->scheduled_at->format('M j, Y') }} · {{ $appt->proceduresLabel() }} · {{ $appt->dentist?->name }}
-                            @if ($appt->balance() > 0)<span class="text-red-500">· ₱{{ number_format($appt->balance(), 2) }} due</span>@endif
+                <div class="rounded-2xl bg-white border border-slate-200/60 p-4 shadow-soft">
+                    <div class="flex items-start justify-between gap-3">
+                        <div class="min-w-0">
+                            <div class="font-medium text-slate-800">{{ $appt->proceduresLabel() }}</div>
+                            <div class="text-sm text-slate-500 mt-0.5">{{ $appt->scheduled_at->format('l, M j, Y · g:i A') }}</div>
+                            <div class="text-xs text-slate-400 mt-0.5">{{ $appt->dentist?->name ?? 'Dentist' }}</div>
                         </div>
-                        <span class="px-2.5 py-0.5 rounded-full text-xs font-medium {{ $appt->status->badgeClasses() }}">{{ $appt->status->label() }}</span>
+                        <div class="flex flex-col items-end gap-1 shrink-0">
+                            <span class="px-2.5 py-0.5 rounded-full text-xs font-medium {{ $appt->status->badgeClasses() }}">{{ $appt->status->label() }}</span>
+                            @if ($appt->balance() > 0)
+                                <span class="text-xs font-medium text-red-500">₱{{ number_format($appt->balance(), 2) }} due</span>
+                            @endif
+                        </div>
                     </div>
                     @include('portal.appointments._pay', ['appt' => $appt])
                 </div>
@@ -67,6 +100,6 @@
                 <p class="text-sm text-slate-400">No past appointments.</p>
             @endforelse
         </div>
-        <div class="mt-4">{{ $past->links() }}</div>
+        <div class="mt-5">{{ $past->links() }}</div>
     </div>
 @endsection
