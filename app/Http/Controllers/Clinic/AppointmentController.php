@@ -103,6 +103,14 @@ class AppointmentController extends Controller
             ]);
         }
 
+        // Confirm to the patient if they have a portal account.
+        $patient->user?->notify(new \App\Notifications\PatientAlert(
+            'Appointment confirmed',
+            'Your appointment with '.$dentist->name.' is booked for '.$start->format('l, M j · g:i A').'.',
+            route('portal.appointments.index'),
+            email: true,
+        ));
+
         return redirect()->route('clinic.appointments.index')
             ->with('status', 'Appointment created.');
     }
@@ -111,7 +119,7 @@ class AppointmentController extends Controller
     {
         $this->authorize('view', $appointment);
 
-        $appointment->load(['patient.user', 'dentist', 'service', 'payments.recorder', 'creator', 'canceller', 'procedures.service', 'procedures.performer', 'billingStatement']);
+        $appointment->load(['patient.user', 'dentist', 'service', 'payments.recorder', 'creator', 'canceller', 'procedures.service', 'procedures.performer', 'billingStatement.items', 'recommendations.service']);
 
         $patientUser = $appointment->patient?->user;
 

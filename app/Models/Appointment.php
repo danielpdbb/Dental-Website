@@ -89,6 +89,30 @@ class Appointment extends Model
         return $this->hasOne(BillingStatement::class);
     }
 
+    /** Stage-1 pre-appointment assessment (patient/reception filled). */
+    public function intake(): HasOne
+    {
+        return $this->hasOne(AppointmentIntake::class);
+    }
+
+    /** Stage-2 dentist clinical findings. */
+    public function finding(): HasOne
+    {
+        return $this->hasOne(AppointmentFinding::class);
+    }
+
+    /** Regression recommendations (Stage 1 + Stage 2) for this appointment. */
+    public function recommendations(): HasMany
+    {
+        return $this->hasMany(AppointmentRecommendation::class)->latest();
+    }
+
+    /** Interactive odontogram annotations made this visit. */
+    public function toothRecords(): HasMany
+    {
+        return $this->hasMany(ToothRecord::class);
+    }
+
     public function endorser(): BelongsTo
     {
         return $this->belongsTo(User::class, 'endorsed_by');
@@ -117,6 +141,30 @@ class Appointment extends Model
 
         if ($eligible && $this->total_amount > 0 && $this->balance() <= 0) {
             $this->update(['status' => AppointmentStatus::Completed]);
+            $this->stampInvoice();
+
+            // Notify the patient their payment landed and the invoice is ready.
+            $this->patient?->user?->notify(new \App\Notifications\PatientAlert(
+                'Payment received',
+                'We received full payment for your '.$this->scheduled_at->format('M j').' visit. Your official invoice is ready to print.',
+                route('portal.appointments.index'),
+                email: true,
+            ));
+        }
+    }
+
+    /**
+     * On full payment, finalise the billing statement into an invoice (number + date)
+     * so the patient and front desk can print an official receipt.
+     */
+    public function stampInvoice(): void
+    {
+        $statement = $this->billingStatement;
+        if ($statement && ! $statement->invoice_no) {
+            $statement->update([
+                'invoice_no' => 'INV-'.now()->format('Ymd').'-'.str_pad((string) $this->id, 5, '0', STR_PAD_LEFT),
+                'paid_at' => now(),
+            ]);
         }
     }
 
@@ -131,10 +179,15 @@ class Appointment extends Model
     }
 
     /**
-     * Remaining balance = charge − collected (never negative).
+     * Remaining balance = charge − collected (never negative). A cancelled or
+     * no-show visit is never charged, so it can never carry a balance.
      */
     public function balance(): float
     {
+        if (in_array($this->status, [AppointmentStatus::Cancelled, AppointmentStatus::NoShow], true)) {
+            return 0.0;
+        }
+
         return max(0, (float) $this->total_amount - $this->amountPaid());
     }
 

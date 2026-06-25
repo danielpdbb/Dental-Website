@@ -56,6 +56,31 @@
                 </div>
             </div>
 
+            {{-- Regression recommendations (read-only summary) --}}
+            @if ($appointment->recommendations->isNotEmpty())
+                <div class="mt-5">
+                    <div class="text-slate-400 text-xs uppercase tracking-wider mb-2">AI recommendations</div>
+                    <div class="space-y-2">
+                        @foreach ($appointment->recommendations as $rec)
+                            <div class="rounded-xl border border-slate-100 p-3">
+                                <div class="flex items-start justify-between gap-3">
+                                    <div class="min-w-0">
+                                        <div class="text-xs text-slate-400">{{ $rec->source->label() }}</div>
+                                        <div class="font-medium text-sm">{{ $rec->recommendation }}</div>
+                                        <div class="flex flex-wrap gap-2 mt-1.5 text-xs">
+                                            @if ($rec->priority)<span class="px-2 py-0.5 rounded-full font-medium {{ $rec->priority->badgeClasses() }}">{{ $rec->priority->label() }}</span>@endif
+                                            @if ($rec->follow_up_weeks)<span class="px-2 py-0.5 rounded-full bg-slate-100 text-slate-500">~{{ $rec->follow_up_weeks }}w</span>@endif
+                                            @if ($rec->suggested_at)<span class="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700">{{ $rec->suggested_at->format('M j, Y g:i A') }}</span>@endif
+                                        </div>
+                                    </div>
+                                    <span class="shrink-0 px-2.5 py-0.5 rounded-full text-xs font-medium {{ $rec->status->badgeClasses() }}">{{ $rec->status->label() }}</span>
+                                </div>
+                            </div>
+                        @endforeach
+                    </div>
+                </div>
+            @endif
+
             @if ($appointment->status->value === 'booked')
                 <div class="mt-5 flex flex-wrap gap-2">
                     <form method="POST" action="{{ route('clinic.appointments.complete', $appointment) }}">
@@ -90,15 +115,39 @@
             <h3 class="font-display text-lg font-bold">Billing</h3>
 
             @if ($appointment->status === \App\Enums\AppointmentStatus::ForBilling)
-                <form method="POST" action="{{ route('clinic.appointments.billing.store', $appointment) }}" class="mt-3" data-confirm="Create the billing statement for the performed procedures?">
+                @php $performed = $appointment->procedures->where('status', \App\Enums\ProcedureStatus::Performed); @endphp
+                <form method="POST" action="{{ route('clinic.appointments.billing.store', $appointment) }}" class="mt-3 space-y-3" data-confirm="Create the itemised billing statement?">
                     @csrf
-                    <button class="w-full h-10 rounded-lg gradient-brand text-white text-sm font-semibold hover:opacity-90 transition">Create billing statement</button>
+                    <div class="rounded-lg border border-slate-100 divide-y divide-slate-100 text-sm">
+                        @foreach ($performed as $proc)
+                            <div class="flex justify-between px-3 py-1.5"><span>{{ $proc->procedure_name }}</span><span>₱{{ number_format($proc->price, 2) }}</span></div>
+                        @endforeach
+                        <div class="flex justify-between px-3 py-1.5 font-medium"><span>Subtotal</span><span>₱{{ number_format($performed->sum('price'), 2) }}</span></div>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-slate-500 mb-1">Discount (₱, optional)</label>
+                        <input type="number" step="0.01" min="0" name="discount" value="0" class="w-full h-10 px-3 rounded-lg border border-slate-200 text-sm outline-none focus:border-brand-blue" />
+                    </div>
+                    <input type="text" name="notes" placeholder="Statement notes (optional)" class="w-full h-10 px-3 rounded-lg border border-slate-200 text-sm outline-none focus:border-brand-blue" />
+                    <button class="w-full h-10 rounded-lg gradient-brand text-white text-sm font-semibold hover:opacity-90 transition">Create itemised statement</button>
                 </form>
             @endif
+
             @if ($appointment->billingStatement)
+                @php $statement = $appointment->billingStatement; @endphp
                 <div class="mt-3 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500">
-                    Statement <span class="font-medium text-slate-700">{{ $appointment->billingStatement->statement_no }}</span>
-                    · {{ $appointment->billingStatement->issued_at?->format('M j, Y') }}
+                    Statement <span class="font-medium text-slate-700">{{ $statement->statement_no }}</span>
+                    · {{ $statement->issued_at?->format('M j, Y') }}
+                    @if ($statement->invoice_no)<br>Invoice <span class="font-medium text-emerald-700">{{ $statement->invoice_no }}</span> · {{ $statement->paid_at?->format('M j, Y') }}@endif
+                </div>
+                @if ($statement->items->isNotEmpty())
+                    <div class="mt-3">@include('clinic.billing._items', ['statement' => $statement, 'appointment' => $appointment])</div>
+                @endif
+                <div class="mt-2 flex gap-2">
+                    <a href="{{ route('clinic.appointments.billing.print', [$appointment, 'bill']) }}" target="_blank" class="flex-1 h-9 inline-flex items-center justify-center rounded-lg border border-slate-200 text-xs font-medium text-slate-600 hover:bg-slate-50">Print bill</a>
+                    @if ($statement->invoice_no)
+                        <a href="{{ route('clinic.appointments.billing.print', [$appointment, 'invoice']) }}" target="_blank" class="flex-1 h-9 inline-flex items-center justify-center rounded-lg bg-brand-green/10 text-emerald-700 text-xs font-medium hover:bg-brand-green/20">Print invoice</a>
+                    @endif
                 </div>
             @endif
 

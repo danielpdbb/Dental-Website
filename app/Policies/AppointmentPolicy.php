@@ -85,11 +85,30 @@ class AppointmentPolicy
     }
 
     /**
+     * Viewing a visit's clinical workspace (read-only): any dentist or management,
+     * so a dentist can review a patient's previous treatments — including visits a
+     * colleague handled. Editing still requires recordTreatment.
+     */
+    public function viewTreatment(User $user, Appointment $appointment): bool
+    {
+        return in_array($user->role, [UserRole::Dentist, UserRole::Management], true);
+    }
+
+    /**
      * Creating the billing statement is a front-desk action.
      */
     public function bill(User $user, Appointment $appointment): bool
     {
         return $user->role === UserRole::Receptionist;
+    }
+
+    /**
+     * Filling the Stage-1 pre-appointment assessment: the patient for their own
+     * booking, or any staff member (walk-in / phone booking on their behalf).
+     */
+    public function submitIntake(User $user, Appointment $appointment): bool
+    {
+        return $this->isStaff($user) || $this->ownsAppointment($user, $appointment);
     }
 
     private function isStaff(User $user): bool

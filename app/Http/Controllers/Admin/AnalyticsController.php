@@ -10,6 +10,7 @@ use App\Models\Service;
 use App\Models\User;
 use App\Services\Analytics\ReportFilter;
 use App\Services\Analytics\ReportService;
+use App\Services\Analytics\SchedulingInsights;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 
@@ -34,6 +35,7 @@ class AnalyticsController extends Controller
             'pivot' => $service->pivot($pivotRows, 'month', $filter->measure),
             'pivotRowsDim' => $pivotRows,
             'heatmap' => $service->demandHeatmap(),
+            'insights' => (new SchedulingInsights($filter->from, $filter->to))->kpis(),
             'segments' => $service->segments(3),
             'appointments' => $service->tableQuery()->paginate(15)->withQueryString(),
 

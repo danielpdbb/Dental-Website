@@ -1,0 +1,133 @@
+Predictive Analytics Overview
+Dental Website System
+PurposeThis document explains how the dental website can use Decision Tree analytics for appointment scheduling and management KPIs, and Regression Analysis for treatment support and next-visit recommendations. These analytics are decision-support tools and do not replace the final judgment of clinic staff or the dentist.
+1. Decision Tree Algorithm
+Predictive Appointment Scheduling and Management Dashboard Analytics
+The Decision Tree Algorithm is used to predict and recommend suitable appointment slots based on patient history, appointment patterns, procedure details, dentist availability, and clinic workload. It can support the patient booking page, the receptionist dashboard, and the management dashboard.
+A. Patient Booking Side
+When a patient books an appointment through the website, the system can suggest the most suitable available appointment slots. The system may analyze the patient appointment history, preferred schedule, procedure type, estimated procedure duration, dentist availability, clinic peak hours, and previous no-show or cancellation behavior.
+Data Used
+Example
+Patient appointment history
+Previous visit dates and preferred times
+Preferred schedule
+Morning, afternoon, weekend
+Procedure type
+Cleaning, extraction, consultation
+Estimated procedure duration
+30 minutes, 1 hour, 2 hours
+Dentist availability
+Available dentist and time
+No-show or cancellation history
+Missed or cancelled appointments before
+Example Output
+Recommended appointment slots: Saturday 9:00 AM, Saturday 10:30 AM, or Monday 2:00 PM. This helps patients choose better schedules and reduces booking conflicts.
+There should be a button above the appointment form that shows the recommended slot and when clicked it will auto fill. But recommendation also must ensure schedule availability of the dentist when suggesting.
+B. Receptionist Dashboard Function
+The same Decision Tree scheduling feature can be available in the receptionist dashboard. This is useful when a patient calls, messages, or walks in and the receptionist needs to schedule the appointment manually.
+Receptionist Input or some autofilled
+Example
+Patient name
+Juan Dela Cruz
+Procedure
+Tooth extraction
+Preferred day and time
+Friday afternoon
+Dentist preference
+Any available dentist
+Urgency
+High
+Patient history
+Missed 1 appointment before
+The system can then recommend the best available slot, alternative slots, the predicted no-show risk, and a suggested action such as sending an appointment reminder.
+C. Management Dashboard KPI Indicators
+For management, they can access the same function as receptionist, but they also have the Decision Tree analytics to support KPI indicators and scheduling strategy. These KPIs help management understand appointment demand, workload distribution, risk areas, and unused schedule capacity.
+KPI Indicator
+What It Shows
+Purpose
+Busy Days
+Days with the highest appointment demand
+Helps identify when the clinic is most active
+Peak Hours
+Time periods with the most bookings
+Helps with dentist and staff planning
+No-Show Risk %
+Predicted percentage or risk level of missed appointments
+Helps reduce missed appointments through reminders
+Dentist Workload
+Appointments or total treatment hours per dentist
+Helps balance workload
+Underused Slots
+Time slots with low booking frequency
+Helps promote or optimize unused slots
+Procedure Demand
+Most commonly booked procedures
+Helps prepare supplies, staff, and equipment
+Schedule Efficiency
+How full or balanced the clinic schedule is
+Helps avoid overcrowding or idle clinic hours
+Example KPI CardsBusiest Day: Saturday | Peak Hour: 9:00 AM - 12:00 PM | No-Show Risk: 18% | Most Underused Slot: Tuesday 2:00 PM - 4:00 PM | Highest Workload Dentist: Dr. Santos | Most Booked Procedure: Dental Cleaning
+Decision Tree Summary
+The Decision Tree Algorithm supports predictive appointment scheduling, receptionist booking assistance, and management KPI monitoring. It analyzes patient preferences, procedure duration, dentist availability, historical booking patterns, no-show behavior, clinic workload, busy days, peak hours, dentist workload, and underused slots.
+2. Regression Analysis
+For Regression Analysis suggestion, I want it to appear per appointment of the patient not just in the patient record of dentist or management because currently it just shows a form and suggest procedure that everytime I save the intake it will be overwritten. Then in the patient record part, it will show a section that based on the previous appointment after procedure clinical findings here is the suggested next procedure (This should also be visible on the latest appointment history details page if management or dentist checks). Dentist will check it for verification, can add or edit it, then after accepting, they can print the recommendation and based on the analytics the system will automatically suggest a time and date based on the decision tree. Also after the dentist accepts it and when the prompts ask to verify and she accepts then the suggested procedure and recommended time and date will be also sent to the patient, where they can view it in their dashboard and even print it too.
+Make the regression analysis appointment based not patient record based
+Current Treatment Support and Next-Visit Recommendation
+Regression Analysis is used to support dental treatment planning. It analyzes patient symptoms, oral health behaviors, clinical indicators, and dentist findings to recommend possible treatments or follow-up procedures. It can be used in two stages: before or during the current appointment using the patient form, and after the procedure using the dentist clinical findings form.
+Stage 1: Patient Form for Possible Current Treatment Recommendation
+For every appointment, the patient can answer a pre-appointment assessment form. This form collects information about symptoms, pain level, oral health habits, and dental concerns. The answers are used as input for regression analysis.
+Patient Form Question
+Example Answer
+What is your main concern?
+Toothache
+Pain level
+8/10
+Do you have tooth sensitivity?
+Yes
+Do your gums bleed?
+No
+Do you have swelling?
+Yes
+When was your last dental visit?
+More than 1 year ago
+How often do you brush your teeth?
+Once a day
+What procedure did you book?
+Dental consultation
+Example Regression OutputPossible current treatment recommendation: Dental examination, X-ray evaluation, tooth filling assessment, or root canal evaluation.
+Then there is a button that automatically adds that treatment to the current book appointment
+Dentist Side View
+On the dentist dashboard, the dentist can view the appointment details, the patient's pre-appointment form answers, and the regression-based possible current treatment recommendation. This helps the dentist prepare before checking the patient. However, the system only provides decision support. The dentist still performs the actual examination and makes the final treatment decision.
+Dentist Dashboard Item
+Example
+Patient concern
+Toothache
+Pain level
+8/10
+Symptoms
+Sensitivity and swelling
+Booked procedure
+Dental consultation
+Possible current treatment recommendation
+Dental examination, X-ray evaluation, tooth filling assessment, or root canal evaluation
+Stage 2: Dentist Clinical Findings Form for Next-Visit Recommendation
+After the current appointment or procedure, the dentist fills out a clinical findings form. This form contains actual observations and treatment notes from the dentist, making it more accurate than the pre-appointment form alone.
+Clinical Finding
+Example
+Cavity found
+Yes
+Gum inflammation
+Moderate
+Plaque level
+High
+Tooth mobility
+No
+Infection signs
+Possible
+X-ray needed
+Yes
+Treatment done today
+Temporary filling
+Dentist remarks
+Needs follow-up treatment
+Example Next-Visit OutputRecommended next visit: Tooth filling completion | Suggested follow-up period: 1-2 weeks | Possible additional treatment: X-ray or root canal evaluation | Priority level: High

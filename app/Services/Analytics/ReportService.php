@@ -75,16 +75,24 @@ class ReportService
     */
     public function kpis(): array
     {
+        // "Charged" / "Outstanding" only count appointments that were actually billed
+        // (a bill exists or the visit completed). Booked/cancelled/no-show carry an
+        // estimate but were never billed, so they no longer inflate what's owed —
+        // cancelled/no-show value is shown separately as "Est. lost revenue".
+        $billedStatuses = "a.status in ('billed', 'for_billing', 'in_treatment', 'completed')";
+
         $r = $this->base()->selectRaw(
             "count(*) as total,
              sum(a.status = 'completed') as completed,
              sum(a.status = 'no_show') as no_show,
              sum(a.status = 'cancelled') as cancelled,
-             coalesce(sum(a.total_amount), 0) as charged,
+             sum({$billedStatuses}) as billed_count,
+             coalesce(sum(case when {$billedStatuses} then a.total_amount else 0 end), 0) as charged,
              coalesce(sum(pay.paid), 0) as collected"
         )->first();
 
         $total = (int) ($r->total ?? 0);
+        $billedCount = (int) ($r->billed_count ?? 0);
 
         return [
             'appointments' => $total,
@@ -94,7 +102,7 @@ class ReportService
             'outstanding' => max(0, (float) ($r->charged ?? 0) - (float) ($r->collected ?? 0)),
             'noShowRate' => $total ? round(($r->no_show ?? 0) / $total * 100, 1) : 0,
             'cancellationRate' => $total ? round(($r->cancelled ?? 0) / $total * 100, 1) : 0,
-            'avgBill' => $total ? round(($r->charged ?? 0) / $total, 2) : 0,
+            'avgBill' => $billedCount ? round(($r->charged ?? 0) / $billedCount, 2) : 0,
         ];
     }
 

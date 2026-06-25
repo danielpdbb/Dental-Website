@@ -69,6 +69,9 @@
     @include('partials.select')
     @include('partials.chatbot')
 
+    {{-- htmx — powers async pagination/filtering (swaps just the list, no full reload) --}}
+    <script src="https://unpkg.com/htmx.org@2.0.3"></script>
+
     @stack('scripts')
 </body>
 

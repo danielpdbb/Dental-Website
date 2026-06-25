@@ -13,9 +13,12 @@ use App\Http\Controllers\Auth\PasswordResetLinkController;
 use App\Http\Controllers\Auth\RegisteredUserController;
 use App\Http\Controllers\Clinic\AllergyController;
 use App\Http\Controllers\Clinic\AppointmentController as ClinicAppointmentController;
+use App\Http\Controllers\Clinic\AppointmentRecommendationController;
 use App\Http\Controllers\Clinic\BillingController;
+use App\Http\Controllers\Clinic\ClinicalFindingController;
 use App\Http\Controllers\Clinic\ClinicalIntakeController;
 use App\Http\Controllers\Clinic\CurrentTreatmentController;
+use App\Http\Controllers\PreVisitAssessmentController;
 use App\Http\Controllers\Clinic\DentistScheduleController;
 use App\Http\Controllers\Clinic\PatientController;
 use App\Http\Controllers\Clinic\PaymentController;
@@ -23,11 +26,13 @@ use App\Http\Controllers\Clinic\QrPaymentController;
 use App\Http\Controllers\Clinic\RecommendationController;
 use App\Http\Controllers\Clinic\ReferralController as ClinicReferralController;
 use App\Http\Controllers\Clinic\SchedulingController;
+use App\Http\Controllers\Clinic\ToothChartController;
 use App\Http\Controllers\Clinic\TreatmentController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\Portal\AppointmentController as PortalAppointmentController;
 use App\Http\Controllers\Portal\OnlinePaymentController;
+use App\Http\Controllers\Portal\RecommendationController as PortalRecommendationController;
 use App\Http\Controllers\Portal\RecordController;
 use App\Http\Controllers\Portal\ReferralController as PortalReferralController;
 use App\Http\Controllers\Portal\RewardController as PortalRewardController;
@@ -83,6 +88,10 @@ Route::middleware('auth')->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::put('/profile/password', [ProfileController::class, 'updatePassword'])->name('profile.password');
+
+    // In-app notification bell
+    Route::post('/notifications/read-all', [\App\Http\Controllers\NotificationController::class, 'readAll'])->name('notifications.read-all');
+    Route::post('/notifications/{id}/read', [\App\Http\Controllers\NotificationController::class, 'read'])->name('notifications.read');
 });
 
 /*
@@ -114,6 +123,18 @@ Route::get('/dashboard', [DashboardController::class, 'index'])
 
 /*
 |--------------------------------------------------------------------------
+| Stage-1 pre-appointment assessment (patient OR staff — authorized in policy)
+|--------------------------------------------------------------------------
+*/
+Route::middleware('auth')->group(function () {
+    Route::post('/appointments/{appointment}/pre-visit', [PreVisitAssessmentController::class, 'save'])
+        ->name('appointments.pre-visit.save');
+    Route::post('/appointments/{appointment}/pre-visit/{recommendation}/add', [PreVisitAssessmentController::class, 'addSuggested'])
+        ->name('appointments.pre-visit.add');
+});
+
+/*
+|--------------------------------------------------------------------------
 | Admin area
 |--------------------------------------------------------------------------
 */
@@ -142,12 +163,18 @@ Route::prefix('admin')->name('admin.')->group(function () {
 Route::middleware(['auth', 'verified', 'role:patient'])->prefix('portal')->name('portal.')->group(function () {
     Route::get('/record', [RecordController::class, 'show'])->name('record');
 
+    // Print a recommendation the dentist accepted & sent
+    Route::get('/recommendations/{recommendation}/print', [PortalRecommendationController::class, 'print'])->name('recommendations.print');
+
     Route::get('/appointments', [PortalAppointmentController::class, 'index'])->name('appointments.index');
     Route::get('/appointments/book', [PortalAppointmentController::class, 'create'])->name('appointments.create');
     Route::post('/appointments', [PortalAppointmentController::class, 'store'])->name('appointments.store');
     Route::get('/appointments/{appointment}/reschedule', [PortalAppointmentController::class, 'reschedule'])->name('appointments.reschedule');
     Route::put('/appointments/{appointment}/reschedule', [PortalAppointmentController::class, 'updateSchedule'])->name('appointments.reschedule.update');
     Route::post('/appointments/{appointment}/cancel', [PortalAppointmentController::class, 'cancel'])->name('appointments.cancel');
+
+    // Printable invoice for a fully-paid visit
+    Route::get('/appointments/{appointment}/invoice', [PortalAppointmentController::class, 'invoice'])->name('appointments.invoice');
 
     // Online payment (PayMongo)
     Route::post('/appointments/{appointment}/pay', [OnlinePaymentController::class, 'checkout'])->name('appointments.pay');
@@ -195,6 +222,15 @@ Route::middleware(['auth', 'role:receptionist,dentist,management'])->prefix('cli
     Route::delete('appointments/{appointment}/treatment/procedures/{procedure}', [CurrentTreatmentController::class, 'removeProcedure'])->name('appointments.treatment.remove');
     Route::post('appointments/{appointment}/treatment/endorse', [CurrentTreatmentController::class, 'endorse'])->name('appointments.treatment.endorse');
 
+    // Stage-2 clinical findings + recommendation review (dentist own / management via policy)
+    Route::post('appointments/{appointment}/findings', [ClinicalFindingController::class, 'save'])->name('appointments.findings.save');
+    Route::post('appointments/{appointment}/teeth', [ToothChartController::class, 'store'])->name('appointments.teeth.store');
+    Route::put('appointments/{appointment}/recommendations/{recommendation}', [AppointmentRecommendationController::class, 'update'])->name('appointments.recommendations.update');
+    Route::post('appointments/{appointment}/recommendations/{recommendation}/accept', [AppointmentRecommendationController::class, 'accept'])->name('appointments.recommendations.accept');
+    Route::post('appointments/{appointment}/recommendations/{recommendation}/reject', [AppointmentRecommendationController::class, 'reject'])->name('appointments.recommendations.reject');
+    Route::post('appointments/{appointment}/recommendations/{recommendation}/send', [AppointmentRecommendationController::class, 'send'])->name('appointments.recommendations.send');
+    Route::get('appointments/{appointment}/recommendations/{recommendation}/print', [AppointmentRecommendationController::class, 'print'])->name('appointments.recommendations.print');
+
     // Appointment desk — receptionist & management only
     Route::middleware('role:receptionist,management')->group(function () {
         Route::get('appointments', [ClinicAppointmentController::class, 'index'])->name('appointments.index');
@@ -211,6 +247,7 @@ Route::middleware(['auth', 'role:receptionist,dentist,management'])->prefix('cli
         // Billing queue + statement creation (receptionist / management)
         Route::get('billing', [BillingController::class, 'index'])->name('billing.index');
         Route::post('appointments/{appointment}/billing', [BillingController::class, 'store'])->name('appointments.billing.store');
+        Route::get('appointments/{appointment}/billing/print/{type}', [BillingController::class, 'print'])->name('appointments.billing.print');
 
         // In-store GCash QR (PayMongo QR Ph)
         Route::post('appointments/{appointment}/qr', [QrPaymentController::class, 'generate'])->name('appointments.qr.generate');

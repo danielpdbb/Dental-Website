@@ -6,6 +6,18 @@
     </div>
 @endif
 
+{{-- Itemised bill (transparent line items) once the statement has been issued. --}}
+@if ($appt->billingStatement && $appt->billingStatement->items->isNotEmpty()
+    && in_array($appt->status, [\App\Enums\AppointmentStatus::Billed, \App\Enums\AppointmentStatus::Completed], true))
+    <div class="mt-3 pt-3 border-t border-slate-100">
+        <div class="text-xs uppercase tracking-wider text-slate-400 mb-2">Your itemised bill</div>
+        @include('clinic.billing._items', ['statement' => $appt->billingStatement, 'appointment' => $appt])
+        @if ($appt->billingStatement->invoice_no)
+            <a href="{{ route('portal.appointments.invoice', $appt) }}" target="_blank" class="mt-2 inline-block text-sm font-medium text-emerald-700 hover:underline">✓ Paid — print invoice →</a>
+        @endif
+    </div>
+@endif
+
 @if ($appt->isPayable())
     @php
         $rewardPeso = $rewardPeso ?? 0;

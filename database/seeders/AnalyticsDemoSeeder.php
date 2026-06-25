@@ -130,12 +130,11 @@ class AnalyticsDemoSeeder extends Seeder
     private function addPayments(\App\Models\Appointment $appointment, float $price, ?int $staffId): void
     {
         $method = [PaymentMethod::Cash, PaymentMethod::Gcash, PaymentMethod::Card][array_rand([0, 1, 2])];
-        $fullyPaid = random_int(1, 100) <= 80;
 
-        $amount = $fullyPaid ? $price : round($price * (random_int(40, 90) / 100), 2);
-
+        // Completed visits are paid in full (a remaining balance belongs to "Billed",
+        // not "Completed") — keeps the UI unambiguous.
         $appointment->payments()->create([
-            'amount' => $amount,
+            'amount' => $price,
             'method' => $method,
             'status' => PaymentStatus::Paid,
             'gateway' => 'manual',

@@ -28,6 +28,7 @@
         <!-- Right Actions -->
         <div class="flex items-center gap-2">
             @auth
+                @include('partials.notification-bell')
                 <a href="{{ auth()->user()->canManageUsers() ? route('admin.dashboard') : route('dashboard') }}"
                     class="text-sm font-medium text-slate-600 hover:text-brand-blue transition px-3 py-1.5">
                     Dashboard

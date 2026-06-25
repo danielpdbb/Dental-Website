@@ -23,6 +23,7 @@ class DatabaseSeeder extends Seeder
             ClinicalRecordSeeder::class,
             RewardSeeder::class,
             AnalyticsDemoSeeder::class, // ~12 months of synthetic history for the dashboard
+            ClinicalDemoSeeder::class,  // intakes, findings, recommendations, tooth charts, invoices
         ]);
     }
 }

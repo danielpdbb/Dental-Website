@@ -44,12 +44,23 @@
                 <div class="flex-1 min-w-0 border-l border-slate-100 pl-4">
                     <div class="font-medium text-slate-800">{{ $appt->patient?->fullName() ?? '—' }}</div>
                     <div class="text-sm text-slate-500">{{ \Illuminate\Support\Str::limit($appt->proceduresLabel(), 45) }} · {{ $appt->duration_minutes }} min @if($appt->is_walk_in)<span class="text-amber-600">· walk-in</span>@endif</div>
+                    <div class="mt-1 flex flex-wrap gap-1.5">
+                        @if ($appt->intake)
+                            <span class="px-2 py-0.5 rounded-full text-[11px] font-medium bg-brand-green/10 text-emerald-700">Assessment ✓</span>
+                        @else
+                            <span class="px-2 py-0.5 rounded-full text-[11px] font-medium bg-slate-100 text-slate-400">Assessment pending</span>
+                        @endif
+                        @php($hasNext = $appt->recommendations->firstWhere('source', \App\Enums\RecommendationSource::Stage2Next))
+                        @if ($hasNext)
+                            <span class="px-2 py-0.5 rounded-full text-[11px] font-medium bg-brand-blue/10 text-brand-blue">Next-visit: {{ $hasNext->status->label() }}</span>
+                        @endif
+                    </div>
                 </div>
                 <span class="px-2.5 py-0.5 rounded-full text-xs font-medium {{ $appt->status->badgeClasses() }}">{{ $appt->status->label() }}</span>
                 <div class="flex items-center gap-3 shrink-0">
                     <a href="{{ route('clinic.appointments.treatment', $appt) }}" class="text-sm font-medium text-brand-blue hover:underline">Treatment</a>
                     @if ($appt->patient)
-                        <a href="{{ route('clinic.patients.show', $appt->patient) }}" class="text-sm text-slate-500 hover:underline">Record</a>
+                        <a href="{{ route('clinic.patients.show', $appt->patient) }}" class="text-sm text-slate-500 hover:underline">View patient record</a>
                     @endif
                 </div>
             </div>
