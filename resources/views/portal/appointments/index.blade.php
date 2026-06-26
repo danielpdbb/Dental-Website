@@ -12,13 +12,51 @@
         </div>
 
         @if ($outstanding > 0)
-            <div class="mt-5 rounded-2xl border border-red-200 bg-red-50 px-5 py-4 flex items-center justify-between">
+            @php $outstandingItems = $upcoming->filter(fn ($a) => $a->status === \App\Enums\AppointmentStatus::Billed && $a->balance() > 0); @endphp
+            <div class="mt-5 rounded-2xl border border-red-200 bg-red-50 px-5 py-4 flex items-center justify-between gap-3">
                 <div>
                     <div class="text-sm text-red-600 font-medium">Outstanding balance</div>
                     <div class="font-display text-2xl font-bold text-red-600">₱{{ number_format($outstanding, 2) }}</div>
                 </div>
-                <span class="text-xs text-slate-500 max-w-[12rem] text-right">Pay online below, or settle at the clinic.</span>
+                <button type="button" id="ob-open" class="shrink-0 h-9 px-3 rounded-lg bg-white border border-red-200 text-red-600 text-xs font-semibold hover:bg-red-100 transition">Show breakdown</button>
             </div>
+
+            <div id="ob-modal" class="fixed inset-0 z-[90] hidden items-center justify-center bg-slate-900/40 p-4">
+                <div class="bg-white rounded-2xl shadow-xl w-full max-w-md p-5 max-h-[85vh] overflow-auto">
+                    <div class="flex items-center justify-between mb-3">
+                        <h3 class="font-display font-bold">Outstanding balance breakdown</h3>
+                        <button type="button" id="ob-close" class="text-slate-400 hover:text-slate-700 text-2xl leading-none">&times;</button>
+                    </div>
+                    <div class="divide-y divide-slate-100">
+                        @forelse ($outstandingItems as $a)
+                            <div class="flex items-start justify-between gap-3 py-2.5 text-sm">
+                                <div class="min-w-0">
+                                    <div class="font-medium text-slate-800">{{ $a->proceduresLabel() }}</div>
+                                    <div class="text-xs text-slate-500">{{ $a->scheduled_at->format('M j, Y') }} · {{ $a->dentist?->name ?? 'Dentist' }}</div>
+                                    @if ($a->billingStatement)<div class="text-[11px] text-slate-400">{{ $a->billingStatement->statement_no }}</div>@endif
+                                    <div class="text-[11px] text-slate-400">Charged ₱{{ number_format($a->total_amount, 2) }} · Paid ₱{{ number_format($a->amountPaid(), 2) }}</div>
+                                </div>
+                                <span class="font-semibold text-red-600 whitespace-nowrap">₱{{ number_format($a->balance(), 2) }}</span>
+                            </div>
+                        @empty
+                            <p class="py-3 text-sm text-slate-400">No itemised balances.</p>
+                        @endforelse
+                    </div>
+                    <div class="flex items-center justify-between border-t-2 border-slate-200 pt-2.5 mt-2 font-bold">
+                        <span>Total due</span><span class="text-red-600">₱{{ number_format($outstanding, 2) }}</span>
+                    </div>
+                    <p class="mt-3 text-xs text-slate-400">Pay any bill online below, or settle at the clinic.</p>
+                </div>
+            </div>
+            <script>
+            (function () {
+                var o = document.getElementById('ob-open'), m = document.getElementById('ob-modal'), c = document.getElementById('ob-close');
+                if (!o || !m) return;
+                o.addEventListener('click', function () { m.classList.remove('hidden'); m.classList.add('flex'); });
+                c.addEventListener('click', function () { m.classList.add('hidden'); m.classList.remove('flex'); });
+                m.addEventListener('click', function (e) { if (e.target === m) { m.classList.add('hidden'); m.classList.remove('flex'); } });
+            })();
+            </script>
         @endif
 
         @include('portal.appointments._recommendations')

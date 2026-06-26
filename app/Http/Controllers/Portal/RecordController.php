@@ -28,6 +28,10 @@ class RecordController extends Controller
             ->paginate(8, ['*'], 'history')
             ->withQueryString();
 
+        // For the "view details" modal — the rest of that visit's context.
+        $history->getCollection()->loadMissing(['appointment.dentist', 'appointment.finding',
+            'appointment.procedures' => fn ($q) => $q->where('status', \App\Enums\ProcedureStatus::Performed->value)]);
+
         // Procedures the patient has actually had, for the filter dropdown.
         $historyServices = \App\Models\AppointmentProcedure::query()
             ->where('status', \App\Enums\ProcedureStatus::Performed->value)

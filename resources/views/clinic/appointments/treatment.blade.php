@@ -63,6 +63,7 @@
                             <div class="text-xs text-brand-blue font-medium">AI suggestion — possible current treatment <span class="text-slate-400 font-normal">(staff only)</span></div>
                             <div class="font-semibold mt-1">{{ $stage1->recommendation }}</div>
                             @if ($stage1->confidence !== null)<div class="text-xs text-slate-500 mt-0.5">Confidence {{ round($stage1->confidence * 100) }}%</div>@endif
+                            @include('partials._ai-disclaimer', ['kind' => 'recommendation'])
                             @if ($editable && $stage1->linked_service_id && ! $appointment->procedures->contains('service_id', $stage1->linked_service_id))
                                 <form method="POST" action="{{ route('appointments.pre-visit.add', [$appointment, $stage1]) }}" class="mt-2">
                                     @csrf
@@ -98,7 +99,12 @@
                     @forelse ($appointment->procedures as $proc)
                         <div class="flex items-center justify-between gap-3 px-4 py-3">
                             <div class="min-w-0">
-                                <div class="font-medium text-sm">{{ $proc->procedure_name }}</div>
+                                <div class="font-medium text-sm flex items-center gap-2">
+                                    {{ $proc->procedure_name }}
+                                    @if ($proc->toothLabel())
+                                        <span class="px-1.5 py-0.5 rounded-md text-[10px] font-medium bg-brand-blue/10 text-brand-blue">{{ $proc->toothLabel() }}</span>
+                                    @endif
+                                </div>
                                 <div class="text-xs text-slate-400">
                                     ₱{{ number_format($proc->price, 2) }} · {{ $proc->duration_minutes }} min
                                     @if ($proc->performer) · by {{ $proc->performer->name }} @endif
@@ -138,6 +144,15 @@
                                 @endforeach
                             </select>
                         </div>
+                        <div class="min-w-[9rem]">
+                            <label class="block text-xs font-medium text-slate-500 mb-1">Tooth <span class="text-slate-300 font-normal">(optional)</span></label>
+                            <select name="tooth_fdi" class="w-full h-10 px-3 rounded-lg border border-slate-200 text-sm outline-none focus:border-brand-blue">
+                                <option value="">— Whole mouth —</option>
+                                @foreach (\App\Models\ToothRecord::FDI_UNIVERSAL as $fdi => $uni)
+                                    <option value="{{ $fdi }}">Tooth {{ $fdi }} (Univ {{ $uni }})</option>
+                                @endforeach
+                            </select>
+                        </div>
                         <input type="text" name="notes" placeholder="Notes (optional)" class="h-10 px-3 rounded-lg border border-slate-200 text-sm outline-none focus:border-brand-blue flex-1 min-w-[10rem]" />
                         <button class="h-10 px-4 rounded-lg bg-slate-800 text-white text-sm font-medium hover:bg-slate-700 transition">Add</button>
                     </form>
@@ -147,12 +162,14 @@
             {{-- Interactive dental chart --}}
             <div class="rounded-2xl bg-white border border-slate-200/60 p-6 shadow-soft">
                 <h3 class="font-display text-lg font-bold mb-1">Dental chart</h3>
-                <p class="text-xs text-slate-400 mb-4">Click a tooth to record its condition, treatment done, medicine given and observations.</p>
+                <p class="text-xs text-slate-400 mb-4">Click a tooth to record its condition, link it to a procedure on this visit, and add treatment/medicine/observations. Toggle <span class="font-medium text-brand-blue">full patient history</span> to see every visit&rsquo;s state — you can still record for this visit.</p>
                 @include('partials.teeth-chart', [
                     'chartMode' => $editable ? 'edit' : 'view',
                     'chartId' => 'tooth-rx',
                     'records' => $teethRecords,
+                    'recordsAll' => $teethAll,
                     'historyByFdi' => $teethHistory,
+                    'procedures' => $editable ? $teethProcedures : [],
                     'saveUrl' => $editable ? route('clinic.appointments.teeth.store', $appointment) : null,
                 ])
             </div>
@@ -240,15 +257,55 @@
             </div>
 
             @if ($editable)
-                <form method="POST" action="{{ route('clinic.appointments.treatment.endorse', $appointment) }}" class="mt-4" data-confirm="Endorse this session to reception for billing?">
-                    @csrf
-                    <button class="w-full h-11 rounded-xl gradient-brand text-white font-semibold shadow-brand hover:opacity-90 transition disabled:opacity-50" {{ $performedCount === 0 ? 'disabled' : '' }}>
-                        Endorse for billing
-                    </button>
-                </form>
+                @php $unperformed = $appointment->procedures->count() - $performedCount; @endphp
+                <button type="button" id="endorse-open" class="mt-4 w-full h-11 rounded-xl gradient-brand text-white font-semibold shadow-brand hover:opacity-90 transition disabled:opacity-50" {{ $performedCount === 0 ? 'disabled' : '' }}>
+                    Endorse for billing
+                </button>
                 @if ($performedCount === 0)
                     <p class="mt-2 text-xs text-slate-400">Mark at least one procedure performed to endorse.</p>
                 @endif
+
+                {{-- Endorse confirmation (warns about unperformed procedures + read-only lock) --}}
+                <div id="endorse-modal" class="fixed inset-0 z-[95] hidden items-center justify-center bg-slate-900/40 p-4">
+                    <div class="bg-white rounded-2xl shadow-xl w-full max-w-md p-5">
+                        <h4 class="font-display text-lg font-bold">Endorse to reception?</h4>
+                        <p class="text-sm text-slate-500 mt-1">This sends the visit to reception for billing. <strong class="text-slate-700">Once endorsed, the treatment record becomes read-only and can no longer be edited.</strong></p>
+
+                        @if ($unperformed > 0)
+                            <div class="mt-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                                ⚠ <strong>{{ $unperformed }}</strong> procedure(s) are <strong>not marked performed</strong>. Only the <strong>{{ $performedCount }}</strong> performed procedure(s) will be billed — the rest are dropped.
+                            </div>
+                            <label class="mt-3 flex items-start gap-2 text-sm text-slate-600">
+                                <input type="checkbox" id="endorse-confirm-chk" class="mt-0.5 rounded border-slate-300">
+                                <span>I confirm that only the procedures marked performed were completed, and the others were not.</span>
+                            </label>
+                        @endif
+
+                        <div class="mt-4 flex justify-end gap-2">
+                            <button type="button" id="endorse-cancel" class="h-10 px-4 rounded-lg border border-slate-200 text-sm font-medium text-slate-600 hover:bg-slate-50">Cancel</button>
+                            <form method="POST" action="{{ route('clinic.appointments.treatment.endorse', $appointment) }}">
+                                @csrf
+                                <button type="submit" id="endorse-proceed" class="h-10 px-4 rounded-lg gradient-brand text-white text-sm font-semibold hover:opacity-90 disabled:opacity-50" {{ $unperformed > 0 ? 'disabled' : '' }}>Proceed &amp; endorse</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+                <script>
+                (function () {
+                    var open = document.getElementById('endorse-open');
+                    var modal = document.getElementById('endorse-modal');
+                    var cancel = document.getElementById('endorse-cancel');
+                    var chk = document.getElementById('endorse-confirm-chk');
+                    var proceed = document.getElementById('endorse-proceed');
+                    if (!open || !modal) return;
+                    function show() { modal.classList.remove('hidden'); modal.classList.add('flex'); }
+                    function hide() { modal.classList.add('hidden'); modal.classList.remove('flex'); }
+                    open.addEventListener('click', show);
+                    cancel.addEventListener('click', hide);
+                    modal.addEventListener('click', function (e) { if (e.target === modal) hide(); });
+                    if (chk && proceed) chk.addEventListener('change', function () { proceed.disabled = !chk.checked; });
+                })();
+                </script>
             @elseif (! $open)
                 <p class="mt-4 text-sm text-emerald-600 font-medium">✓ Already endorsed</p>
             @endif

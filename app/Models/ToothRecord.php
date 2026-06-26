@@ -69,6 +69,7 @@ class ToothRecord extends Model
             'special_procedure' => $r->special_procedure,
             'observation' => $r->observation,
             'surfaces' => $r->surfaces ?? [],
+            'appointment_procedure_id' => $r->appointment_procedure_id,
             'date' => $r->created_at?->format('M j, Y'),
             'dentist' => $r->recorder?->name,
         ])->all();

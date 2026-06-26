@@ -149,6 +149,7 @@
                             <div class="text-[11px] uppercase tracking-wider text-brand-blue mb-0.5">Recommended follow-up</div>
                             <div class="text-sm font-semibold text-slate-800">{{ $rec->recommendation }}@if ($rec->priority) <span class="ml-1 text-xs font-medium px-1.5 py-0.5 rounded {{ $rec->priority->badgeClasses() }}">{{ $rec->priority->label() }}</span>@endif</div>
                             @if ($rec->suggested_at)<div class="text-xs text-emerald-700 mt-0.5">Suggested schedule: <span class="font-medium">{{ $rec->suggested_at->format('M j, Y · g:i A') }}</span></div>@endif
+                            @include('partials._ai-disclaimer', ['kind' => 'recommendation'])
                         </div>
                     @endif
                 </article>

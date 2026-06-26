@@ -49,6 +49,9 @@
                     <span class="text-xs text-amber-600">Run <code>php artisan ml:scheduling:train</code> to rank by attendance likelihood</span>
                 @endif
             </div>
+            @if ($modelTrained)
+                <div class="mb-3">@include('partials._ai-disclaimer', ['kind' => 'scheduling'])</div>
+            @endif
             @if ($suggestedAction)
                 <div class="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
                     <span class="font-semibold">Suggested action:</span> {{ $suggestedAction }}

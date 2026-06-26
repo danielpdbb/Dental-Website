@@ -2,9 +2,14 @@
   <div class="container mx-auto px-6 py-12 grid gap-10 md:grid-cols-4">
 
     <div class="space-y-3">
-      <div class="text-xl font-semibold">Logo</div>
+      <a href="{{ route('home') }}" class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl shadow-soft gradient-brand flex items-center justify-center overflow-hidden shrink-0">
+          <img src="/images/logo.jpg" alt="Bonoan's Dental Clinic" class="w-full h-full object-cover" />
+        </div>
+        <span class="font-bold text-lg text-brand-navy leading-tight" style="font-family: Georgia, serif;">Bonoan's Dental Clinic</span>
+      </a>
       <p class="text-sm text-gray-500 max-w-xs">
-        Bonoan's Dental Clinic — your trusted neighbourhood dental care, powered by a modern patient-first platform.
+        Your trusted neighbourhood dental care, powered by a modern patient-first platform.
       </p>
     </div>
 

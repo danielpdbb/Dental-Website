@@ -13,7 +13,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * become part of the patient's treatment history.
  */
 #[Fillable([
-    'appointment_id', 'service_id', 'procedure_name', 'price', 'duration_minutes',
+    'appointment_id', 'service_id', 'procedure_name', 'tooth_fdi', 'price', 'duration_minutes',
     'status', 'performed_by', 'performed_at', 'notes',
 ])]
 class AppointmentProcedure extends Model
@@ -21,11 +21,24 @@ class AppointmentProcedure extends Model
     protected function casts(): array
     {
         return [
+            'tooth_fdi' => 'integer',
             'price' => 'decimal:2',
             'duration_minutes' => 'integer',
             'status' => ProcedureStatus::class,
             'performed_at' => 'datetime',
         ];
+    }
+
+    /** Short label for the linked tooth, e.g. "Tooth 16 (Univ 3)" — or null if whole-mouth. */
+    public function toothLabel(): ?string
+    {
+        if (! $this->tooth_fdi) {
+            return null;
+        }
+
+        $uni = ToothRecord::fdiToUniversal($this->tooth_fdi);
+
+        return 'Tooth '.$this->tooth_fdi.($uni ? " (Univ {$uni})" : '');
     }
 
     public function appointment(): BelongsTo

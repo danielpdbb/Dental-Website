@@ -22,6 +22,7 @@
                 @if ($next->suggested_at)
                     <div class="text-xs text-emerald-700 mt-0.5">Suggested schedule: {{ $next->suggested_at->format('l, M j, Y · g:i A') }}</div>
                 @endif
+                @include('partials._ai-disclaimer', ['kind' => 'recommendation'])
             </div>
             <div class="flex items-center gap-2 shrink-0">
                 <a href="{{ $bookUrl($next) }}" class="h-9 px-3 inline-flex items-center rounded-lg gradient-brand text-white text-xs font-semibold hover:opacity-90 transition">Book recommended</a>
