@@ -27,7 +27,7 @@ class ClinicalDemoSeeder extends Seeder
             ->whereHas('procedures', fn ($q) => $q->where('status', ProcedureStatus::Performed->value))
             ->with(['procedures', 'patient', 'dentist'])
             ->latest('scheduled_at')
-            ->take(60)->get();
+            ->take(220)->get();
 
         if ($appointments->isEmpty()) {
             $this->command?->warn('ClinicalDemoSeeder: no completed appointments with performed procedures. Skipped.');
@@ -90,11 +90,15 @@ class ClinicalDemoSeeder extends Seeder
                 ]);
             }
 
-            // A few odontogram tooth records.
-            $teeth = fake()->randomElements($fdiPool, random_int(2, 5));
+            // A few odontogram tooth records. Where a performed procedure already names a
+            // tooth, reuse that FDI and link the record to it (mirrors the live workflow).
+            $linkedTeeth = $appt->procedures->whereNotNull('tooth_fdi');
+            $teeth = $linkedTeeth->pluck('tooth_fdi')->all();
+            $teeth = array_unique(array_merge($teeth, fake()->randomElements($fdiPool, random_int(1, 3))));
             foreach ($teeth as $fdi) {
                 $appt->toothRecords()->create([
                     'fdi_number' => $fdi,
+                    'appointment_procedure_id' => $linkedTeeth->firstWhere('tooth_fdi', $fdi)?->id,
                     'condition' => fake()->randomElement($conditions),
                     'treatment_done' => fake()->randomElement(['Composite filling', 'Scaling', 'Crown prep', 'RCT', null]),
                     'medicine_given' => fake()->randomElement($meds),

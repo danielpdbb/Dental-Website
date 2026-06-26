@@ -28,6 +28,7 @@
             @if ($rec->sent_to_patient_at)
                 <div class="text-xs text-slate-500 mt-1">✓ Sent to patient {{ $rec->sent_to_patient_at->diffForHumans() }}</div>
             @endif
+            @include('partials._ai-disclaimer', ['kind' => 'recommendation'])
         </div>
         <span class="shrink-0 px-2.5 py-0.5 rounded-full text-xs font-medium {{ $rec->status->badgeClasses() }}">{{ $rec->status->label() }}</span>
     </div>

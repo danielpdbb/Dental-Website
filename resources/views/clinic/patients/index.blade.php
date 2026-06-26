@@ -9,9 +9,9 @@
         <form method="GET" action="{{ route('clinic.patients.index') }}" class="flex flex-wrap gap-2">
             <input type="text" name="search" value="{{ $filters['search'] ?? '' }}" placeholder="Search name or phone"
                 class="h-10 px-4 rounded-lg border border-slate-200 text-sm focus:border-brand-blue focus:ring-2 focus:ring-brand-blue/20 outline-none w-64" />
-            <select name="account" onchange="this.form.requestSubmit()" class="h-10 px-3 rounded-lg border border-slate-200 text-sm outline-none focus:border-brand-blue">
+            <select name="account" onchange="this.form.requestSubmit()" class="h-10 px-3 min-w-[13rem] rounded-lg border border-slate-200 text-sm outline-none focus:border-brand-blue">
                 <option value="">All patients</option>
-                <option value="registered" @selected(($filters['account'] ?? '') === 'registered')>With account</option>
+                <option value="registered" @selected(($filters['account'] ?? '') === 'registered')>Registered (with account)</option>
                 <option value="walkin" @selected(($filters['account'] ?? '') === 'walkin')>Walk-in (no login)</option>
             </select>
             <button type="submit" class="h-10 px-4 rounded-lg bg-slate-800 text-white text-sm font-medium hover:bg-slate-700 transition">Filter</button>

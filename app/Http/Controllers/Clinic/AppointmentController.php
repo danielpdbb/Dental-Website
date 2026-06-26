@@ -23,24 +23,58 @@ use Illuminate\View\View;
 
 class AppointmentController extends Controller
 {
+    /** Status groups behind the index tabs. */
+    private const TABS = [
+        'active' => ['booked', 'in_treatment', 'for_billing'],
+        'billed' => ['billed'],
+        'finished' => ['completed', 'no_show', 'cancelled'],
+    ];
+
     public function index(Request $request): View
     {
         $this->authorize('viewAny', Appointment::class);
 
+        $tab = $request->string('tab')->toString();
+        $tab = array_key_exists($tab, self::TABS) ? $tab : 'active';
+
+        // Live patient search — server-side LIKE so it scales past thousands of records.
+        $q = $request->string('q')->trim()->value();
+
         $appointments = Appointment::query()
             ->with(['patient', 'dentist', 'service', 'payments', 'procedures'])
-            ->when($request->filled('status'), fn ($q) => $q->where('status', $request->string('status')))
-            ->when($request->filled('dentist_id'), fn ($q) => $q->where('dentist_id', $request->integer('dentist_id')))
-            ->when($request->filled('date'), fn ($q) => $q->whereDate('scheduled_at', $request->date('date')))
+            ->whereIn('status', self::TABS[$tab])
+            ->when($request->filled('dentist_id'), fn ($qr) => $qr->where('dentist_id', $request->integer('dentist_id')))
+            ->when($request->filled('date'), fn ($qr) => $qr->whereDate('scheduled_at', $request->date('date')))
+            ->when($q, fn ($qr) => $qr->whereHas('patient', fn ($p) => $p
+                ->where('first_name', 'like', "%{$q}%")
+                ->orWhere('last_name', 'like', "%{$q}%")
+                ->orWhereRaw("concat(first_name, ' ', last_name) like ?", ["%{$q}%"])
+                ->orWhere('phone', 'like', "%{$q}%")))
             ->orderByDesc('scheduled_at')
             ->paginate(20)
             ->withQueryString();
 
+        // Tab counts (respect the same search/dentist/date filters so they stay honest).
+        $countBase = fn (array $statuses) => Appointment::query()
+            ->whereIn('status', $statuses)
+            ->when($request->filled('dentist_id'), fn ($qr) => $qr->where('dentist_id', $request->integer('dentist_id')))
+            ->when($request->filled('date'), fn ($qr) => $qr->whereDate('scheduled_at', $request->date('date')))
+            ->when($q, fn ($qr) => $qr->whereHas('patient', fn ($p) => $p
+                ->where('first_name', 'like', "%{$q}%")->orWhere('last_name', 'like', "%{$q}%")
+                ->orWhereRaw("concat(first_name, ' ', last_name) like ?", ["%{$q}%"])->orWhere('phone', 'like', "%{$q}%")))
+            ->count();
+
         return view('clinic.appointments.index', [
             'appointments' => $appointments,
             'dentists' => User::where('role', UserRole::Dentist)->orderBy('name')->get(),
-            'statuses' => AppointmentStatus::options(),
-            'filters' => $request->only('status', 'dentist_id', 'date'),
+            'tab' => $tab,
+            'q' => $q,
+            'counts' => [
+                'active' => $countBase(self::TABS['active']),
+                'billed' => $countBase(self::TABS['billed']),
+                'finished' => $countBase(self::TABS['finished']),
+            ],
+            'filters' => $request->only('dentist_id', 'date'),
         ]);
     }
 

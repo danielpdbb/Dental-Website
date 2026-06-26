@@ -41,7 +41,9 @@ class CurrentTreatmentController extends Controller
             'stage1' => $appointment->recommendations->firstWhere('source', \App\Enums\RecommendationSource::Stage1Current),
             'stage2' => $appointment->recommendations->firstWhere('source', \App\Enums\RecommendationSource::Stage2Next),
             'teethRecords' => \App\Models\ToothRecord::chartArray($appointment->toothRecords),
+            'teethAll' => \App\Models\ToothRecord::chartArray($patientToothRecords),
             'teethHistory' => \App\Models\ToothRecord::historyArray($patientToothRecords),
+            'teethProcedures' => $appointment->procedures->map(fn ($p) => ['id' => $p->id, 'name' => $p->procedure_name])->all(),
         ]);
     }
 
@@ -52,6 +54,7 @@ class CurrentTreatmentController extends Controller
 
         $data = $request->validate([
             'service_id' => ['required', Rule::exists('services', 'id')->where('is_active', true)],
+            'tooth_fdi' => ['nullable', Rule::in(array_keys(\App\Models\ToothRecord::FDI_UNIVERSAL))],
             'notes' => ['nullable', 'string', 'max:500'],
         ]);
 
@@ -60,6 +63,7 @@ class CurrentTreatmentController extends Controller
         $appointment->procedures()->create([
             'service_id' => $service->id,
             'procedure_name' => $service->name,
+            'tooth_fdi' => $data['tooth_fdi'] ?? null,
             'price' => $service->price,
             'duration_minutes' => $service->duration_minutes,
             'status' => ProcedureStatus::Planned,

@@ -50,6 +50,7 @@ class ToothChartController extends Controller
             'special_procedure' => $record->special_procedure,
             'observation' => $record->observation,
             'surfaces' => $record->surfaces ?? [],
+            'appointment_procedure_id' => $record->appointment_procedure_id,
         ]);
     }
 }

@@ -12,10 +12,12 @@
      *          $saveUrl (edit only), $chartId.
      */
     $chartMode = $chartMode ?? 'view';
-    $records = $records ?? [];
+    $records = $records ?? [];          // colours shown by default (e.g. this visit)
+    $recordsAll = $recordsAll ?? null;  // optional: patient's latest-per-tooth across all visits
     $historyByFdi = $historyByFdi ?? [];
     $chartId = $chartId ?? 'teeth';
     $saveUrl = $saveUrl ?? null;
+    $procedures = $procedures ?? [];    // edit mode: link a tooth record to a procedure on this visit
 
     // Universal-number → label position (from the source artwork).
     $labelPos = [
@@ -39,9 +41,16 @@
     </style>
 
     <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
-        <label class="inline-flex items-center gap-2 text-xs text-slate-500">
-            <input type="checkbox" class="uni-toggle rounded border-slate-300"> Show Universal (1–32) numbers
-        </label>
+        <div class="flex flex-wrap items-center gap-3">
+            <label class="inline-flex items-center gap-2 text-xs text-slate-500">
+                <input type="checkbox" class="uni-toggle rounded border-slate-300"> Show Universal (1–32) numbers
+            </label>
+            @if (! is_null($recordsAll))
+                <label class="inline-flex items-center gap-2 text-xs font-medium text-brand-blue">
+                    <input type="checkbox" class="history-toggle rounded border-slate-300"> Show full patient history (all visits)
+                </label>
+            @endif
+        </div>
         <div class="flex flex-wrap gap-x-3 gap-y-1">
             @foreach (ToothCondition::cases() as $c)
                 <span class="inline-flex items-center gap-1 text-[11px] text-slate-500">
@@ -77,6 +86,17 @@
             @if ($chartMode === 'edit')
                 <form class="tc-form space-y-3 text-sm">
                     <input type="hidden" name="fdi_number" value="">
+                    @if (! empty($procedures))
+                        <div>
+                            <label class="block text-xs text-slate-500 mb-1">Link to a procedure on this visit <span class="text-slate-300">(optional)</span></label>
+                            <select name="appointment_procedure_id" class="w-full h-10 px-2 rounded-lg border border-slate-200">
+                                <option value="">— Not linked —</option>
+                                @foreach ($procedures as $p)
+                                    <option value="{{ $p['id'] }}">{{ $p['name'] }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+                    @endif
                     <div>
                         <label class="block text-xs text-slate-500 mb-1">Condition</label>
                         <select name="condition" class="w-full h-10 px-2 rounded-lg border border-slate-200">
@@ -138,10 +158,12 @@
     const mode = root.dataset.mode;
     const saveUrl = @json($saveUrl);
     const csrf = @json(csrf_token());
-    const data = @json((object) $records);
+    const data = @json((object) $records);                 // current view (e.g. this visit)
+    const dataAll = @json($recordsAll !== null ? (object) $recordsAll : null); // patient history (latest per tooth)
     const history = @json((object) $historyByFdi);
     const FDI_UNI = @json(ToothRecord::FDI_UNIVERSAL);   // fdi -> universal
     const UNI_FDI = {}; Object.keys(FDI_UNI).forEach(f => UNI_FDI[FDI_UNI[f]] = +f);
+    let showAll = false;   // history-toggle state
 
     const modal = root.querySelector('.tc-modal');
     const title = root.querySelector('.tc-title');
@@ -180,6 +202,7 @@
             form.medicine_given.value = (rec && rec.medicine_given) || '';
             form.special_procedure.value = (rec && rec.special_procedure) || '';
             form.observation.value = (rec && rec.observation) || '';
+            if (form.appointment_procedure_id) form.appointment_procedure_id.value = (rec && rec.appointment_procedure_id) || '';
             const surf = (rec && rec.surfaces) || [];
             form.querySelectorAll('input[name="surfaces[]"]').forEach(cb => cb.checked = surf.includes(cb.value));
             root.querySelector('.tc-saved').classList.add('hidden');
@@ -202,15 +225,29 @@
     }
     function close() { modal.classList.add('hidden'); modal.classList.remove('flex'); }
 
-    // Colour each tooth from its current record + wire clicks.
+    function activeSet() { return (showAll && dataAll) ? dataAll : data; }
+    function recolor() {
+        const set = activeSet();
+        root.querySelectorAll('[data-key]').forEach(el => {
+            const fdi = UNI_FDI[el.getAttribute('data-key')];
+            if (!fdi) return;
+            el.setAttribute('fill', (set[fdi] && set[fdi].color) || '#FFFFFF');
+        });
+    }
+
+    // Wire clicks, then colour.
     root.querySelectorAll('[data-key]').forEach(el => {
         const fdi = UNI_FDI[el.getAttribute('data-key')];
         if (!fdi) return;
-        if (data[fdi] && data[fdi].color) el.setAttribute('fill', data[fdi].color);
         el.addEventListener('click', () => open(fdi));
         el.setAttribute('tabindex', '0');
         el.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(fdi); } });
     });
+    recolor();
+
+    // History toggle: recolour from the patient's full history vs the current view.
+    const histToggle = root.querySelector('.history-toggle');
+    if (histToggle) histToggle.addEventListener('change', e => { showAll = e.target.checked; recolor(); });
 
     root.querySelector('.tc-close').addEventListener('click', close);
     modal.addEventListener('click', e => { if (e.target === modal) close(); });
@@ -234,12 +271,15 @@
             if (!res.ok) { alert('Could not save this tooth.'); return; }
             const j = await res.json();
             const fdi = j.fdi;
-            data[fdi] = {
+            const rec = {
                 condition: j.condition, label: j.label, color: j.color,
                 treatment_done: j.treatment_done, medicine_given: j.medicine_given,
                 special_procedure: j.special_procedure, observation: j.observation,
-                surfaces: j.surfaces, date: 'Just now', dentist: 'You',
+                surfaces: j.surfaces, appointment_procedure_id: j.appointment_procedure_id || '',
+                date: 'Just now', dentist: 'You',
             };
+            data[fdi] = rec;
+            if (dataAll) dataAll[fdi] = rec;   // keep the history view in sync
             (history[fdi] = history[fdi] || []).unshift({
                 date: 'Just now', label: j.label, color: j.color,
                 treatment_done: j.treatment_done, medicine_given: j.medicine_given,

@@ -8,10 +8,19 @@ A Laravel-based dental clinic website with public pages, patient accounts, appoi
 - Patient registration, login, email verification, profile editing, and password update
 - Patient dashboard with dental records, appointments, referrals, and online payment flow
 - Appointment booking, cancellation, and rescheduling
+- **Full appointment lifecycle**: booked → in-treatment → for-billing → billed → completed
+- **Dentist "current treatment" workspace**: add procedures (each with an **optional tooth**), mark them performed, then **endorse to reception** for billing (with a confirmation gate when some procedures weren't performed)
+- **Interactive dental chart (odontogram)**: per-visit and full-patient-history views, FDI + Universal numbering, link a tooth annotation to a procedure
+- **Itemised billing & invoices**: per-visit statements, partial payments, printable invoice/recommendation slips
+- **AI / Machine Learning** (decision-support only):
+  - Predictive scheduling — a Decision Tree that estimates attendance risk and suggests optimal slots
+  - Procedure recommendation — regression models for a possible current treatment (Stage 1) and a recommended next visit (Stage 2)
+  - "Which data was used?" transparency disclaimers everywhere AI output appears
+- **Referral rewards**: refer-a-friend codes/links, points earned on qualifying visits, redeemable against bills
 - Clinic back-office for patient records, allergies, treatments, recommendations, referrals, and scheduling
-- Receptionist/management appointment desk with payment recording
+- Receptionist/management appointment desk with **status tabs (Active / Billed / Finished)** and **live server-side patient search**, plus payment recording
 - Dentist schedule view
-- Admin dashboard for users, services, pricing, and analytics
+- Admin dashboard (revenue, today's load, outstanding, needs-attention queues) and analytics
 - Role-based access for patients, receptionists, dentists, and management users
 
 ## Requirements
@@ -145,6 +154,22 @@ php artisan migrate:fresh --seed
 
 Warning: `migrate:fresh --seed` deletes existing tables in the configured database before rebuilding them. Use it only for local development/testing.
 
+The seeders create a realistic demo dataset: ~120 patients and ~700 appointments across ~12 months (completed / no-show / cancelled in lifelike proportions), itemised billing, tooth charts, intakes, clinical findings and AI recommendations — enough volume for the analytics dashboard and for training the ML models.
+
+### Train the machine-learning models
+
+The two ML models are saved as files under `storage/app/models/`. Train (or retrain) them after seeding:
+
+```bash
+# Procedure-recommendation regression (synthetic intake data; can run anytime)
+php artisan ml:recommend:train
+
+# Predictive-scheduling Decision Tree (learns from the seeded appointment history)
+php artisan ml:scheduling:train
+```
+
+Retrain the scheduling model whenever a lot of new appointment history accumulates — it learns from real outcomes, so more data makes it better.
+
 ## Run the Website
 
 Start the Laravel server:
@@ -211,7 +236,7 @@ Username: patient2
 Password: Password123!
 ```
 
-The seeders also create more patient sample records for testing.
+The seeders also create ~115 additional account-less patient records (so the patient base totals ~120) and ~700 appointments, giving the analytics dashboard and ML models realistic volume. Patients `patient1`–`patient5` are the ones with portal logins.
 
 ## Useful Commands
 
@@ -225,6 +250,19 @@ Show all routes:
 
 ```bash
 php artisan route:list --except-vendor
+```
+
+Train / retrain the ML models:
+
+```bash
+php artisan ml:recommend:train     # procedure-recommendation regression
+php artisan ml:scheduling:train    # predictive-scheduling Decision Tree
+```
+
+Send appointment reminders (run on a schedule/cron in production):
+
+```bash
+php artisan appointments:send-reminders
 ```
 
 Build frontend assets:
@@ -307,12 +345,26 @@ php artisan test
 - Analytics dashboard
 - Revenue, appointment, cancellation, and no-show reporting
 
+### Clinical Workflow and AI
+
+- Dentist current-treatment workspace per appointment
+- Add procedure line items, each with an **optional linked tooth**
+- Mark procedures performed; endorse the visit to reception for billing
+- Endorsement confirmation gate when some procedures were not performed
+- Interactive odontogram (dental chart): per-visit + full patient history, FDI/Universal numbers
+- Pre-visit assessment (Stage 1) and clinical findings (Stage 2)
+- AI possible-current-treatment and recommended-next-visit suggestions (dentist verifies/accepts/rejects)
+- Predictive scheduling: attendance-risk Decision Tree and optimal-slot suggestions
+- "Which data was used?" transparency disclaimers on AI output
+- Itemised billing statements, partial payments, printable invoices and recommendation slips
+
 ### Integrations and Local Data
 
 - PayMongo webhook route for payment updates
 - Mail configuration for verification emails
 - Seeded admin, receptionist, dentist, and patient accounts
-- Seeded services, appointments, patients, and clinical records
+- Seeded services, ~700 appointments, ~120 patients, and clinical records
+- Trained ML models stored under `storage/app/models/`
 
 ## Pasteable Local URLs
 
@@ -546,9 +598,44 @@ These routes require receptionist or management access.
 | POST | `/clinic/appointments/{appointment}/no-show` | `clinic.appointments.no-show` | Mark appointment no-show |
 | PUT | `/clinic/appointments/{appointment}/reschedule` | `clinic.appointments.reschedule` | Reschedule appointment |
 | POST | `/clinic/appointments/{appointment}/payment` | `clinic.appointments.payment.store` | Record appointment payment |
+| POST | `/clinic/appointments/{appointment}/redeem-rewards` | `clinic.appointments.redeem-rewards` | Apply patient's reward points to the bill |
 | GET | `/clinic/referrals` | `clinic.referrals.index` | View referral requests |
 | PATCH | `/clinic/referrals/{referral}` | `clinic.referrals.update` | Update referral status or notes |
-| GET | `/clinic/scheduling` | `clinic.scheduling` | Find available appointment slots |
+| GET | `/clinic/scheduling` | `clinic.scheduling` | Predictive scheduling / available slot finder |
+| GET | `/clinic/billing` | `clinic.billing.index` | Awaiting-billing queue (endorsed visits) |
+
+### Clinic Treatment Workspace Routes
+
+The dentist's per-appointment treatment workspace (receptionist/management can open read-only).
+
+| Method | URL | Name | Purpose |
+|---|---|---|---|
+| GET | `/clinic/appointments/{appointment}/treatment` | `clinic.appointments.treatment` | Current-treatment workspace (procedures, chart, findings) |
+| POST | `/clinic/appointments/{appointment}/treatment/procedures` | `clinic.appointments.treatment.add` | Add a procedure line (optional tooth) |
+| PATCH | `/clinic/appointments/{appointment}/treatment/procedures/{procedure}` | `clinic.appointments.treatment.toggle` | Toggle a procedure performed/planned |
+| DELETE | `/clinic/appointments/{appointment}/treatment/procedures/{procedure}` | `clinic.appointments.treatment.remove` | Remove a procedure line |
+| POST | `/clinic/appointments/{appointment}/treatment/endorse` | `clinic.appointments.treatment.endorse` | Endorse the visit to reception for billing |
+| POST | `/clinic/appointments/{appointment}/teeth` | `clinic.appointments.teeth.store` | Save a tooth-chart annotation |
+| POST | `/clinic/appointments/{appointment}/findings` | `clinic.appointments.findings.save` | Save clinical findings → next-visit AI suggestion |
+| POST | `/clinic/appointments/{appointment}/billing` | `clinic.appointments.billing.store` | Issue an itemised billing statement |
+| GET | `/clinic/appointments/{appointment}/billing/print/{type}` | `clinic.appointments.billing.print` | Print invoice / statement |
+
+### Pre-visit & Recommendation Routes
+
+| Method | URL | Name | Purpose |
+|---|---|---|---|
+| POST | `/appointments/{appointment}/pre-visit` | `appointments.pre-visit.save` | Patient/staff submit the pre-visit assessment |
+| POST | `/appointments/{appointment}/pre-visit/{recommendation}/add` | `appointments.pre-visit.add` | Add the AI-suggested treatment to the visit |
+| POST | `/clinic/appointments/{appointment}/recommendations/{recommendation}/accept` | `clinic.appointments.recommendations.accept` | Accept a next-visit recommendation |
+| POST | `/clinic/appointments/{appointment}/recommendations/{recommendation}/reject` | `clinic.appointments.recommendations.reject` | Reject a recommendation |
+| POST | `/clinic/appointments/{appointment}/recommendations/{recommendation}/send` | `clinic.appointments.recommendations.send` | Send an accepted recommendation to the patient |
+
+### Rewards Routes (patient portal)
+
+| Method | URL | Name | Purpose |
+|---|---|---|---|
+| GET | `/portal/rewards` | `portal.rewards.index` | Refer-a-friend hub: code, share link, points, history |
+| POST | `/portal/appointments/{appointment}/redeem` | `portal.appointments.redeem` | Spend reward points against a bill |
 
 ## Environment Notes
 
