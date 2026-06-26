@@ -300,11 +300,16 @@
             };
             data[fdi] = rec;
             if (dataAll) dataAll[fdi] = rec;   // keep the history view in sync
-            (history[fdi] = history[fdi] || []).unshift({
+            // One record per tooth per visit: update this session's entry in place
+            // instead of stacking a new "Just now" row each time you re-save.
+            const liveEntry = {
                 date: 'Just now', label: j.label, color: j.color,
                 treatment_done: j.treatment_done, medicine_given: j.medicine_given,
-                special_procedure: j.special_procedure, observation: j.observation, dentist: 'You',
-            });
+                special_procedure: j.special_procedure, observation: j.observation, dentist: 'You', _live: true,
+            };
+            history[fdi] = history[fdi] || [];
+            const li = history[fdi].findIndex(e => e._live);
+            if (li >= 0) history[fdi][li] = liveEntry; else history[fdi].unshift(liveEntry);
             paint(fdi, j.color);
             const del = root.querySelector('.tc-delete');
             if (del) del.classList.remove('hidden');
@@ -341,7 +346,7 @@
                 if (!res.ok) { alert('Could not delete this tooth record.'); return; }
                 delete data[fdi];
                 if (dataAll) delete dataAll[fdi];
-                delete history[fdi];
+                if (history[fdi]) history[fdi] = history[fdi].filter(e => !e._live); // keep past visits
                 paint(fdi, '#FFFFFF');
                 hideDel();
                 close();
