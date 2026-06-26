@@ -97,7 +97,8 @@
 
                 <div class="border border-slate-100 rounded-xl divide-y divide-slate-100">
                     @forelse ($appointment->procedures as $proc)
-                        <div class="flex items-center justify-between gap-3 px-4 py-3">
+                        <div class="px-4 py-3">
+                          <div class="flex items-center justify-between gap-3">
                             <div class="min-w-0">
                                 <div class="font-medium text-sm flex items-center gap-2">
                                     {{ $proc->procedure_name }}
@@ -126,6 +127,55 @@
                                     </form>
                                 @endif
                             </div>
+                          </div>
+
+                          @if ($editable)
+                            {{-- Tooth + chart detail editor (works for patient-booked procedures too) --}}
+                            <details class="mt-2">
+                                <summary class="cursor-pointer list-none text-xs font-medium text-brand-blue hover:underline">Tooth &amp; chart details</summary>
+                                <form method="POST" action="{{ route('clinic.appointments.treatment.update', [$appointment, $proc]) }}" class="mt-2 grid sm:grid-cols-2 gap-2 text-sm">
+                                    @csrf @method('PUT')
+                                    <div>
+                                        <label class="block text-[11px] text-slate-500 mb-1">Tooth <span class="text-slate-300">(optional)</span></label>
+                                        <select name="tooth_fdi" class="w-full h-9 px-2 rounded-lg border border-slate-200">
+                                            <option value="">— Whole mouth —</option>
+                                            @foreach (\App\Models\ToothRecord::FDI_UNIVERSAL as $fdi => $uni)
+                                                <option value="{{ $fdi }}" @selected((int) $proc->tooth_fdi === (int) $fdi)>Tooth {{ $fdi }} (Univ {{ $uni }})</option>
+                                            @endforeach
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label class="block text-[11px] text-slate-500 mb-1">Condition on chart</label>
+                                        <select name="tooth_condition" class="w-full h-9 px-2 rounded-lg border border-slate-200">
+                                            <option value="">— Auto from procedure —</option>
+                                            @foreach (\App\Enums\ToothCondition::cases() as $c)
+                                                <option value="{{ $c->value }}" @selected($proc->tooth_condition === $c->value)>{{ $c->label() }}</option>
+                                            @endforeach
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label class="block text-[11px] text-slate-500 mb-1">Medicine given</label>
+                                        <input type="text" name="medicine_given" value="{{ $proc->medicine_given }}" class="w-full h-9 px-2 rounded-lg border border-slate-200" placeholder="e.g. Amoxicillin 500mg">
+                                    </div>
+                                    <div>
+                                        <label class="block text-[11px] text-slate-500 mb-1">Surfaces</label>
+                                        <div class="flex gap-2 text-xs h-9 items-center">
+                                            @foreach (['M','O','D','B','L'] as $s)
+                                                <label class="inline-flex items-center gap-1"><input type="checkbox" name="tooth_surfaces[]" value="{{ $s }}" @checked(in_array($s, $proc->tooth_surfaces ?? [], true)) class="rounded border-slate-300"> {{ $s }}</label>
+                                            @endforeach
+                                        </div>
+                                    </div>
+                                    <div class="sm:col-span-2">
+                                        <label class="block text-[11px] text-slate-500 mb-1">Notes / observation</label>
+                                        <input type="text" name="notes" value="{{ $proc->notes }}" class="w-full h-9 px-2 rounded-lg border border-slate-200" placeholder="Clinical note for this procedure">
+                                    </div>
+                                    <div class="sm:col-span-2">
+                                        <button class="h-9 px-3 rounded-lg bg-slate-800 text-white text-xs font-medium hover:bg-slate-700">Save details</button>
+                                        <span class="text-[11px] text-slate-400 ml-2">Saved details appear on the dental chart once the procedure is marked performed.</span>
+                                    </div>
+                                </form>
+                            </details>
+                          @endif
                         </div>
                     @empty
                         <div class="px-4 py-6 text-sm text-slate-400 text-center">No procedures yet. Add one below.</div>

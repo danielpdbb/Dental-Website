@@ -53,4 +53,17 @@ class ToothChartController extends Controller
             'appointment_procedure_id' => $record->appointment_procedure_id,
         ]);
     }
+
+    /**
+     * Remove this visit's annotation for one tooth (the chart's "delete"). Scoped to the
+     * appointment so a dentist can only clear records on a visit they may edit.
+     */
+    public function destroy(Appointment $appointment, int $fdi): JsonResponse
+    {
+        $this->authorize('recordTreatment', $appointment);
+
+        $appointment->toothRecords()->where('fdi_number', $fdi)->delete();
+
+        return response()->json(['ok' => true, 'fdi' => $fdi]);
+    }
 }

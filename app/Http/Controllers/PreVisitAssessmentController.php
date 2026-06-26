@@ -41,6 +41,16 @@ class PreVisitAssessmentController extends Controller
         $appointment->intake()->updateOrCreate(['appointment_id' => $appointment->id], $data);
         $recommender->generateStage1($appointment->fresh('intake'));
 
+        // Let the dentist know the patient's pre-visit assessment is in (unless they filled it themselves).
+        if ($appointment->dentist_id && $appointment->dentist_id !== $request->user()->id) {
+            \App\Support\Notifier::user(
+                $appointment->dentist,
+                'Pre-visit assessment ready',
+                ($appointment->patient?->fullName() ?? 'A patient').' completed their pre-visit assessment for the '.$appointment->scheduled_at->format('M j · g:i A').' visit.',
+                route('clinic.appointments.treatment', $appointment),
+            );
+        }
+
         return back()->with('status', 'Pre-visit assessment saved. A suggested treatment has been generated.');
     }
 

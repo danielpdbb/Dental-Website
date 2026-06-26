@@ -197,6 +197,13 @@ class AppointmentController extends Controller
             email: true,
         ));
 
+        // Alert the front desk that a patient booked online.
+        \App\Support\Notifier::desk(
+            'New online booking',
+            $patient->fullName().' booked '.$services->pluck('name')->join(', ').' with '.$dentist->name.' on '.$start->format('M j · g:i A').'.',
+            route('clinic.appointments.show', $appointment),
+        );
+
         return redirect()->route('portal.appointments.index')
             ->with('status', 'Appointment booked for '.$start->format('M j, Y g:i A').'.');
     }
@@ -243,7 +250,14 @@ class AppointmentController extends Controller
             return back()->withErrors(['scheduled_at' => $error]);
         }
 
+        $from = $appointment->scheduled_at->copy();
         $appointment->update(['scheduled_at' => $start]);
+
+        \App\Support\Notifier::desk(
+            'Appointment rescheduled by patient',
+            ($appointment->patient?->fullName() ?? 'A patient').' moved their visit from '.$from->format('M j · g:i A').' to '.$start->format('M j · g:i A').'.',
+            route('clinic.appointments.show', $appointment),
+        );
 
         return redirect()->route('portal.appointments.index')
             ->with('status', 'Appointment moved to '.$start->format('M j, Y g:i A').'.');
@@ -259,6 +273,12 @@ class AppointmentController extends Controller
             'cancelled_at' => now(),
             'cancellation_reason' => $request->input('reason'),
         ]);
+
+        \App\Support\Notifier::desk(
+            'Appointment cancelled by patient',
+            ($appointment->patient?->fullName() ?? 'A patient').' cancelled their '.$appointment->scheduled_at->format('M j · g:i A').' visit'.($request->filled('reason') ? ' — “'.$request->input('reason').'”.' : '.'),
+            route('clinic.appointments.show', $appointment),
+        );
 
         return back()->with('status', 'Appointment cancelled.');
     }
