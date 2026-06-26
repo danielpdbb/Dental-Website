@@ -22,6 +22,9 @@
                     <span class="px-2 py-0.5 rounded-full bg-brand-blue/10 text-brand-blue">{{ $rec->service->name }}</span>
                 @endif
             </div>
+            @if ($rec->notes)
+                <div class="text-sm text-slate-600 mt-1.5">{{ $rec->notes }}</div>
+            @endif
             @if ($rec->suggested_at)
                 <div class="text-xs text-emerald-700 mt-2">Decision-Tree follow-up: <strong>{{ $rec->suggested_at->format('l, M j, Y · g:i A') }}</strong></div>
             @endif
@@ -38,24 +41,48 @@
         @if ($canEdit && $rec->status !== AdviceStatus::Rejected)
             <details class="inline-block">
                 <summary class="cursor-pointer text-xs font-medium text-brand-blue hover:underline list-none">Verify / edit</summary>
-                <form method="POST" action="{{ route('clinic.appointments.recommendations.update', [$appointment, $rec]) }}" class="mt-2 w-72 space-y-2 rounded-lg border border-slate-200 bg-white p-3">
+                <form method="POST" action="{{ route('clinic.appointments.recommendations.update', [$appointment, $rec]) }}" class="mt-2 w-80 space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-soft">
                     @csrf @method('PUT')
-                    <textarea name="recommendation" rows="2" class="w-full px-2 py-1.5 rounded border border-slate-200 text-sm">{{ $rec->recommendation }}</textarea>
-                    <select name="linked_service_id" class="w-full h-9 px-2 rounded border border-slate-200 text-sm">
-                        <option value="">— No linked service —</option>
-                        @foreach ($services as $s)
-                            <option value="{{ $s->id }}" @selected($rec->linked_service_id === $s->id)>{{ $s->name }}</option>
-                        @endforeach
-                    </select>
-                    <div class="flex gap-2">
-                        <select name="priority" class="h-9 px-2 rounded border border-slate-200 text-sm flex-1">
-                            @foreach (\App\Enums\Priority::options() as $val => $lbl)
-                                <option value="{{ $val }}" @selected($rec->priority?->value === $val)>{{ $lbl }}</option>
+
+                    <div>
+                        <label class="block text-xs font-medium text-slate-500 mb-1">Recommended procedure</label>
+                        <select name="linked_service_id" class="w-full h-9 px-2 rounded-lg border border-slate-200 text-sm outline-none focus:border-brand-blue">
+                            <option value="">— Other (use note below) —</option>
+                            @foreach ($services as $s)
+                                <option value="{{ $s->id }}" @selected($rec->linked_service_id === $s->id)>{{ $s->name }}</option>
                             @endforeach
                         </select>
-                        <input type="number" name="follow_up_weeks" min="0" max="52" value="{{ $rec->follow_up_weeks }}" placeholder="weeks" class="h-9 px-2 rounded border border-slate-200 text-sm w-20" />
                     </div>
-                    <button class="w-full h-9 rounded bg-slate-800 text-white text-xs font-medium hover:bg-slate-700">Save changes</button>
+
+                    {{-- Free text only used when no procedure is selected (the "Other" case). --}}
+                    @unless ($rec->linked_service_id)
+                        <div>
+                            <label class="block text-xs font-medium text-slate-500 mb-1">Custom recommendation <span class="text-slate-300 font-normal">(if "Other")</span></label>
+                            <input type="text" name="recommendation" value="{{ $rec->recommendation }}" class="w-full h-9 px-2 rounded-lg border border-slate-200 text-sm outline-none focus:border-brand-blue" placeholder="e.g. Refer to orthodontist" />
+                        </div>
+                    @endunless
+
+                    <div class="grid grid-cols-2 gap-2">
+                        <div>
+                            <label class="block text-xs font-medium text-slate-500 mb-1">Priority</label>
+                            <select name="priority" class="w-full h-9 px-2 rounded-lg border border-slate-200 text-sm outline-none focus:border-brand-blue">
+                                @foreach (\App\Enums\Priority::options() as $val => $lbl)
+                                    <option value="{{ $val }}" @selected($rec->priority?->value === $val)>{{ $lbl }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-slate-500 mb-1">Follow-up (weeks)</label>
+                            <input type="number" name="follow_up_weeks" min="0" max="52" value="{{ $rec->follow_up_weeks }}" placeholder="e.g. 6" class="w-full h-9 px-2 rounded-lg border border-slate-200 text-sm outline-none focus:border-brand-blue" />
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-medium text-slate-500 mb-1">Note for patient <span class="text-slate-300 font-normal">(optional)</span></label>
+                        <textarea name="notes" rows="2" class="w-full px-2 py-1.5 rounded-lg border border-slate-200 text-sm outline-none focus:border-brand-blue" placeholder="Anything to add for the patient">{{ $rec->notes }}</textarea>
+                    </div>
+
+                    <button class="w-full h-9 rounded-lg bg-slate-800 text-white text-xs font-medium hover:bg-slate-700 transition">Save changes</button>
                 </form>
             </details>
 
