@@ -78,15 +78,36 @@ class AppointmentController extends Controller
         ]);
     }
 
-    public function create(Request $request): View
+    public function create(Request $request, PredictiveScheduler $scheduler): View
     {
         $this->authorize('create', Appointment::class);
 
+        $services = Service::active()->orderBy('name')->get();
+        $dentists = User::where('role', UserRole::Dentist)->orderBy('name')->get();
+
+        // Selected services (supports the old ?service_id= prefill from "Find slots").
+        $selectedIds = collect((array) $request->input('service_ids', $request->filled('service_id') ? [$request->integer('service_id')] : []))
+            ->map(fn ($v) => (int) $v)->filter()->values()->all();
+        $selected = $services->whereIn('id', $selectedIds);
+        $duration = max(15, (int) $selected->sum('duration_minutes'));
+
+        $dentist = $request->filled('dentist_id') ? $dentists->firstWhere('id', $request->integer('dentist_id')) : null;
+        $date = $request->filled('date') ? Carbon::parse($request->date('date')) : Carbon::today();
+
+        // Available time tiles for the chosen dentist/date — same UX as patient booking.
+        $slots = ($dentist && $selected->isNotEmpty()) ? $scheduler->daySlots($dentist, $duration, $date) : null;
+
         return view('clinic.appointments.create', [
             'patients' => Patient::orderBy('last_name')->get(),
-            'services' => Service::active()->orderBy('name')->get(),
-            'dentists' => User::where('role', UserRole::Dentist)->orderBy('name')->get(),
-            'prefill' => $request->only('dentist_id', 'service_id', 'scheduled_at', 'patient_id'),
+            'services' => $services,
+            'dentists' => $dentists,
+            'selectedIds' => $selectedIds,
+            'selected' => $selected,
+            'duration' => $duration,
+            'dentist' => $dentist,
+            'date' => $date,
+            'slots' => $slots,
+            'prefill' => $request->only('patient_id'),
         ]);
     }
 
@@ -95,7 +116,8 @@ class AppointmentController extends Controller
         $services = Service::active()->whereIn('id', $request->validated('service_ids'))->get();
         $dentist = User::findOrFail($request->integer('dentist_id'));
         $isWalkIn = $request->boolean('is_walk_in');
-        $start = Carbon::parse($request->date('scheduled_at'));
+        // Walk-ins happen "now"; scheduled bookings use the chosen time slot.
+        $start = $isWalkIn ? now() : Carbon::parse($request->date('scheduled_at'));
         $duration = max(15, (int) $services->sum('duration_minutes'));
 
         // Regular bookings must honour clinic hours; walk-ins are immediate.

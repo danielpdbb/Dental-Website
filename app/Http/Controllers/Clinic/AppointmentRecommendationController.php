@@ -27,14 +27,29 @@ class AppointmentRecommendationController extends Controller
         abort_unless($recommendation->appointment_id === $appointment->id, 404);
 
         $data = $request->validate([
-            'recommendation' => ['required', 'string', 'max:1000'],
             'linked_service_id' => ['nullable', 'exists:services,id'],
+            'recommendation' => ['nullable', 'string', 'max:1000'], // only used when no procedure is chosen
             'priority' => ['required', Rule::enum(Priority::class)],
             'follow_up_weeks' => ['nullable', 'integer', 'min:0', 'max:52'],
             'notes' => ['nullable', 'string', 'max:1000'],
         ]);
 
-        $recommendation->update($data);
+        // The chosen procedure is the single source of truth for the headline; the
+        // free-text is only a fallback for "Other" (no linked service).
+        $service = ! empty($data['linked_service_id']) ? \App\Models\Service::find($data['linked_service_id']) : null;
+        $headline = $service?->name ?: ($data['recommendation'] ?? $recommendation->recommendation);
+
+        if (! $headline) {
+            return back()->withErrors(['recommendation' => 'Choose a procedure or enter a recommendation.']);
+        }
+
+        $recommendation->update([
+            'linked_service_id' => $data['linked_service_id'] ?? null,
+            'recommendation' => $headline,
+            'priority' => $data['priority'],
+            'follow_up_weeks' => $data['follow_up_weeks'] ?? null,
+            'notes' => $data['notes'] ?? null,
+        ]);
 
         return back()->with('status', 'Recommendation updated.');
     }

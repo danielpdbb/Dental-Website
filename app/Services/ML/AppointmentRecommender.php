@@ -130,11 +130,15 @@ class AppointmentRecommender
             ];
         }
 
+        // A routine cleaning is preventive maintenance — never urgent — so it is always
+        // tagged low priority regardless of the model's confidence.
+        $isCleaning = str_contains(strtolower($best->label.' '.$best->service), 'clean');
+
         return [
             'text' => $best->label,
             'service' => Service::where('name', $best->service)->first(),
             'score' => $best->score,
-            'priority' => $this->priorityFromScore($best->score),
+            'priority' => $isCleaning ? Priority::Low : $this->priorityFromScore($best->score),
         ];
     }
 
