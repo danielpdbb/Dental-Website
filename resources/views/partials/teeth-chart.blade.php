@@ -131,6 +131,7 @@
                     </div>
                     <div class="flex items-center gap-2">
                         <button type="submit" class="h-10 px-4 rounded-lg gradient-brand text-white text-sm font-semibold shadow-brand hover:opacity-90">Save tooth</button>
+                        <button type="button" class="tc-delete h-10 px-3 rounded-lg border border-red-200 text-red-500 text-sm font-medium hover:bg-red-50 hidden">Delete</button>
                         <span class="tc-saved text-xs text-emerald-600 hidden">Saved ✓</span>
                     </div>
                 </form>
@@ -147,6 +148,23 @@
             </div>
         </div>
     </div>
+
+    @if ($chartMode === 'edit')
+        {{-- Delete confirmation --}}
+        <div class="tc-del-modal fixed inset-0 z-[100] hidden items-center justify-center bg-slate-900/50 p-4">
+            <div class="bg-white rounded-2xl shadow-xl w-full max-w-sm p-5 text-center">
+                <div class="mx-auto h-11 w-11 rounded-full bg-red-50 flex items-center justify-center mb-3">
+                    <svg class="h-5 w-5 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.9 12.1A2 2 0 0 1 16.1 21H7.9a2 2 0 0 1-2-1.9L5 7m5 4v6m4-6v6M9 7V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v3M4 7h16"/></svg>
+                </div>
+                <h4 class="font-display font-bold">Delete tooth record?</h4>
+                <p class="text-sm text-slate-500 mt-1">This removes tooth <span class="tc-del-fdi font-medium text-slate-700">—</span>’s record for this visit. This can’t be undone.</p>
+                <div class="mt-4 flex justify-center gap-2">
+                    <button type="button" class="tc-del-cancel h-10 px-4 rounded-lg border border-slate-200 text-sm font-medium text-slate-600 hover:bg-slate-50">Cancel</button>
+                    <button type="button" class="tc-del-confirm h-10 px-4 rounded-lg bg-red-500 text-white text-sm font-semibold hover:bg-red-600">Delete</button>
+                </div>
+            </div>
+        </div>
+    @endif
 </div>
 
 <script>
@@ -206,6 +224,8 @@
             const surf = (rec && rec.surfaces) || [];
             form.querySelectorAll('input[name="surfaces[]"]').forEach(cb => cb.checked = surf.includes(cb.value));
             root.querySelector('.tc-saved').classList.add('hidden');
+            const del = root.querySelector('.tc-delete');
+            if (del) del.classList.toggle('hidden', !rec); // only deletable once saved
         } else {
             const empty = root.querySelector('.tc-empty');
             const detail = root.querySelector('.tc-detail');
@@ -286,10 +306,47 @@
                 special_procedure: j.special_procedure, observation: j.observation, dentist: 'You',
             });
             paint(fdi, j.color);
+            const del = root.querySelector('.tc-delete');
+            if (del) del.classList.remove('hidden');
             root.querySelector('.tc-saved').classList.remove('hidden');
             renderHistory(fdi);
             setTimeout(close, 700);
         });
+
+        // Delete this visit's record for the open tooth — via a styled confirm modal.
+        const delBtn = root.querySelector('.tc-delete');
+        const delModal = root.querySelector('.tc-del-modal');
+        const delFdiLabel = root.querySelector('.tc-del-fdi');
+        function showDel() { delModal.classList.remove('hidden'); delModal.classList.add('flex'); }
+        function hideDel() { delModal.classList.add('hidden'); delModal.classList.remove('flex'); }
+
+        if (delBtn && delModal) {
+            delBtn.addEventListener('click', () => {
+                if (!+form.fdi_number.value) return;
+                const fdi = +form.fdi_number.value;
+                const uni = FDI_UNI[fdi];
+                delFdiLabel.textContent = fdi + (uni ? ' (Universal ' + uni + ')' : '');
+                showDel();
+            });
+            root.querySelector('.tc-del-cancel').addEventListener('click', hideDel);
+            delModal.addEventListener('click', e => { if (e.target === delModal) hideDel(); });
+
+            root.querySelector('.tc-del-confirm').addEventListener('click', async () => {
+                const fdi = +form.fdi_number.value;
+                if (!fdi) return;
+                const res = await fetch(saveUrl + '/' + fdi, {
+                    method: 'DELETE',
+                    headers: { 'X-CSRF-TOKEN': csrf, 'Accept': 'application/json' },
+                });
+                if (!res.ok) { alert('Could not delete this tooth record.'); return; }
+                delete data[fdi];
+                if (dataAll) delete dataAll[fdi];
+                delete history[fdi];
+                paint(fdi, '#FFFFFF');
+                hideDel();
+                close();
+            });
+        }
     }
 })();
 </script>

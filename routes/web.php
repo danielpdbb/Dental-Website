@@ -218,6 +218,7 @@ Route::middleware(['auth', 'role:receptionist,dentist,management'])->prefix('cli
     // Current-treatment workspace — dentist (own appts) + management
     Route::get('appointments/{appointment}/treatment', [CurrentTreatmentController::class, 'edit'])->name('appointments.treatment');
     Route::post('appointments/{appointment}/treatment/procedures', [CurrentTreatmentController::class, 'addProcedure'])->name('appointments.treatment.add');
+    Route::put('appointments/{appointment}/treatment/procedures/{procedure}', [CurrentTreatmentController::class, 'updateProcedure'])->name('appointments.treatment.update');
     Route::patch('appointments/{appointment}/treatment/procedures/{procedure}', [CurrentTreatmentController::class, 'togglePerformed'])->name('appointments.treatment.toggle');
     Route::delete('appointments/{appointment}/treatment/procedures/{procedure}', [CurrentTreatmentController::class, 'removeProcedure'])->name('appointments.treatment.remove');
     Route::post('appointments/{appointment}/treatment/endorse', [CurrentTreatmentController::class, 'endorse'])->name('appointments.treatment.endorse');
@@ -225,6 +226,7 @@ Route::middleware(['auth', 'role:receptionist,dentist,management'])->prefix('cli
     // Stage-2 clinical findings + recommendation review (dentist own / management via policy)
     Route::post('appointments/{appointment}/findings', [ClinicalFindingController::class, 'save'])->name('appointments.findings.save');
     Route::post('appointments/{appointment}/teeth', [ToothChartController::class, 'store'])->name('appointments.teeth.store');
+    Route::delete('appointments/{appointment}/teeth/{fdi}', [ToothChartController::class, 'destroy'])->name('appointments.teeth.destroy');
     Route::put('appointments/{appointment}/recommendations/{recommendation}', [AppointmentRecommendationController::class, 'update'])->name('appointments.recommendations.update');
     Route::post('appointments/{appointment}/recommendations/{recommendation}/accept', [AppointmentRecommendationController::class, 'accept'])->name('appointments.recommendations.accept');
     Route::post('appointments/{appointment}/recommendations/{recommendation}/reject', [AppointmentRecommendationController::class, 'reject'])->name('appointments.recommendations.reject');

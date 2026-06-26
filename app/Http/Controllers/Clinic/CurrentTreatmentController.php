@@ -63,7 +63,7 @@ class CurrentTreatmentController extends Controller
         $appointment->procedures()->create([
             'service_id' => $service->id,
             'procedure_name' => $service->name,
-            'tooth_fdi' => $data['tooth_fdi'] ?? null,
+            'tooth_fdi' => ($data['tooth_fdi'] ?? '') === '' ? null : (int) $data['tooth_fdi'],
             'price' => $service->price,
             'duration_minutes' => $service->duration_minutes,
             'status' => ProcedureStatus::Planned,
@@ -74,6 +74,45 @@ class CurrentTreatmentController extends Controller
         $appointment->recomputeTotals();
 
         return back()->with('status', 'Procedure added to the current treatment.');
+    }
+
+    /**
+     * Edit an existing procedure line's tooth + chart details (so a patient-booked
+     * procedure, which has no tooth, can be linked to one). Re-syncs the chart if the
+     * procedure is already performed.
+     */
+    public function updateProcedure(Request $request, Appointment $appointment, AppointmentProcedure $procedure): RedirectResponse
+    {
+        $this->authorize('recordTreatment', $appointment);
+        $this->guardOpen($appointment);
+        abort_unless($procedure->appointment_id === $appointment->id, 404);
+
+        $data = $request->validate([
+            'tooth_fdi' => ['nullable', Rule::in(array_keys(\App\Models\ToothRecord::FDI_UNIVERSAL))],
+            'tooth_condition' => ['nullable', Rule::enum(\App\Enums\ToothCondition::class)],
+            'medicine_given' => ['nullable', 'string', 'max:255'],
+            'tooth_surfaces' => ['nullable', 'array'],
+            'tooth_surfaces.*' => ['in:M,O,D,B,L'],
+            'notes' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        $procedure->update([
+            'tooth_fdi' => ($data['tooth_fdi'] ?? '') === '' ? null : (int) $data['tooth_fdi'],
+            'tooth_condition' => ($data['tooth_condition'] ?? '') === '' ? null : $data['tooth_condition'],
+            'medicine_given' => $data['medicine_given'] ?? null,
+            'tooth_surfaces' => empty($data['tooth_surfaces']) ? null : $data['tooth_surfaces'],
+            'notes' => $data['notes'] ?? null,
+        ]);
+
+        // Keep the chart in step: if it's already performed, mirror the new details;
+        // if the tooth was cleared, drop any record this line created.
+        if ($procedure->isPerformed() && $procedure->tooth_fdi) {
+            $procedure->syncToothRecord($request->user());
+        } elseif (! $procedure->tooth_fdi) {
+            $procedure->removeToothRecord();
+        }
+
+        return back()->with('status', 'Procedure details updated.');
     }
 
     public function togglePerformed(Request $request, Appointment $appointment, AppointmentProcedure $procedure): RedirectResponse
@@ -90,9 +129,20 @@ class CurrentTreatmentController extends Controller
             'performed_at' => $nowPerformed ? now() : null,
         ]);
 
+        // Reflect a tooth-linked procedure on the dental chart (and revert on undo).
+        if ($nowPerformed) {
+            $procedure->syncToothRecord($request->user());
+        } else {
+            $procedure->removeToothRecord();
+        }
+
         $this->markInTreatment($appointment);
 
-        return back()->with('status', $nowPerformed ? 'Marked as performed.' : 'Marked as planned.');
+        $msg = $nowPerformed
+            ? ($procedure->tooth_fdi ? 'Marked as performed and added to the dental chart.' : 'Marked as performed.')
+            : 'Marked as planned.';
+
+        return back()->with('status', $msg);
     }
 
     public function removeProcedure(Appointment $appointment, AppointmentProcedure $procedure): RedirectResponse
@@ -127,6 +177,13 @@ class CurrentTreatmentController extends Controller
             'endorsed_at' => now(),
             'endorsed_by' => request()->user()->id,
         ]);
+
+        // Tell the front desk this visit is ready to bill.
+        \App\Support\Notifier::desk(
+            'Visit ready to bill',
+            ($appointment->dentist?->name ?? 'A dentist').' endorsed '.($appointment->patient?->fullName() ?? 'a patient').'’s visit ('.$performed->count().' procedure(s)) for billing.',
+            route('clinic.billing.index'),
+        );
 
         return redirect()->route('clinic.my-schedule')
             ->with('status', 'Endorsed to reception for billing.');

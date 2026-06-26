@@ -104,6 +104,13 @@ class OnlinePaymentController extends Controller
             $appointment->settleIfPaid();
             $rewards->checkQualification($appointment->patient?->user);
 
+            // Let the front desk know an online payment landed.
+            \App\Support\Notifier::desk(
+                'Online payment received',
+                ($appointment->patient?->fullName() ?? 'A patient').' paid ₱'.number_format($payment->amount, 2).' online for the '.$appointment->scheduled_at->format('M j').' visit.',
+                route('clinic.appointments.show', $appointment),
+            );
+
             return redirect()->route('portal.appointments.index')
                 ->with('status', 'Payment of ₱'.number_format($payment->amount, 2).' received. Thank you!');
         }
