@@ -67,16 +67,9 @@ class AppointmentController extends Controller
      */
     private function sentRecommendations(Patient $patient)
     {
-        return AppointmentRecommendation::query()
-            ->where('source', RecommendationSource::Stage2Next->value)
-            ->whereNotNull('sent_to_patient_at')
-            // Drop follow-ups whose suggested date has already passed.
-            ->where(fn ($q) => $q->whereNull('suggested_at')->orWhere('suggested_at', '>=', now()))
+        return AppointmentRecommendation::sentUpcoming()
             ->whereHas('appointment', fn ($q) => $q->where('patient_id', $patient->id))
             ->with(['appointment.dentist', 'service'])
-            // Soonest upcoming first; undated ones last.
-            ->orderByRaw('suggested_at IS NULL')
-            ->orderBy('suggested_at')
             ->take(8)
             ->get();
     }

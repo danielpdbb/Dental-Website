@@ -18,12 +18,13 @@ class DashboardController extends Controller
     {
         $user = $request->user();
 
-        // Recommendations the dentist accepted & sent to this patient.
+        // Recommendations the dentist accepted & sent to this patient — same set, order
+        // and filtering as the booking pages (upcoming only, soonest first).
         $recommendations = $user->role === UserRole::Patient
-            ? AppointmentRecommendation::whereNotNull('sent_to_patient_at')
+            ? AppointmentRecommendation::sentUpcoming()
                 ->whereHas('appointment.patient', fn ($q) => $q->where('user_id', $user->id))
                 ->with(['appointment.dentist', 'service'])
-                ->latest('sent_to_patient_at')->take(5)->get()
+                ->take(8)->get()
             : new Collection;
 
         return view('dashboard', [

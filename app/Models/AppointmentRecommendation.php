@@ -6,6 +6,7 @@ use App\Enums\AdviceStatus;
 use App\Enums\Priority;
 use App\Enums\RecommendationSource;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -52,5 +53,20 @@ class AppointmentRecommendation extends Model
     public function isAccepted(): bool
     {
         return $this->status === AdviceStatus::Accepted;
+    }
+
+    /**
+     * Accepted next-visit recommendations that were sent to the patient and whose
+     * suggested date hasn't already passed — newest-soonest first (undated last).
+     * Used by the portal booking pages and the patient dashboard so they all match.
+     */
+    public function scopeSentUpcoming(Builder $query): Builder
+    {
+        return $query
+            ->where('source', RecommendationSource::Stage2Next->value)
+            ->whereNotNull('sent_to_patient_at')
+            ->where(fn ($q) => $q->whereNull('suggested_at')->orWhere('suggested_at', '>=', now()))
+            ->orderByRaw('suggested_at IS NULL')
+            ->orderBy('suggested_at');
     }
 }
