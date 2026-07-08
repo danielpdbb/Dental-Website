@@ -29,6 +29,16 @@ class AppointmentController extends Controller
         $pastStatus = $request->string('past_status')->toString();
         $pastStatus = in_array($pastStatus, ['completed', 'cancelled', 'no_show'], true) ? $pastStatus : null;
 
+        // An older installment stays visible until its balance reaches zero, regardless
+        // of which Current/Past tab the visit itself belongs to.
+        $outstandingBills = $patient->appointments()
+            ->where('status', AppointmentStatus::Billed->value)
+            ->with(['dentist', 'payments', 'procedures', 'billingStatement.items'])
+            ->latest('scheduled_at')
+            ->get()
+            ->filter(fn (Appointment $appointment) => $appointment->balance() > 0)
+            ->values();
+
         return view('portal.appointments.index', [
             // Active = anything not yet finished (booked → billed) so a Billed visit
             // always shows here with its pay options; History = terminal states.
@@ -41,7 +51,7 @@ class AppointmentController extends Controller
                     $q->where('scheduled_at', '>=', now()->startOfDay())
                         ->orWhereIn('status', ['in_treatment', 'for_billing', 'billed']);
                 })
-                ->with(['service', 'dentist', 'payments', 'procedures', 'intake', 'recommendations.service', 'billingStatement.items'])
+                ->with(['service', 'dentist', 'payments', 'procedures', 'intake', 'recommendations.service', 'billingStatement.items', 'parent'])
                 ->orderBy('scheduled_at')->get(),
             'past' => $patient->appointments()
                 ->where(function ($q) {
@@ -49,11 +59,11 @@ class AppointmentController extends Controller
                         ->orWhere(fn ($q2) => $q2->where('status', 'booked')->where('scheduled_at', '<', now()->startOfDay()));
                 })
                 ->when($pastStatus, fn ($q) => $q->where('status', $pastStatus))
-                ->with(['service', 'dentist', 'payments', 'procedures', 'billingStatement.items'])->latest('scheduled_at')
+                ->with(['service', 'dentist', 'payments', 'procedures', 'billingStatement.items', 'parent'])->latest('scheduled_at')
                 ->paginate(8, ['*'], 'past')->withQueryString(),
             'pastStatus' => $pastStatus,
-            'outstanding' => $patient->appointments()->where('status', AppointmentStatus::Billed->value)->with('payments')->get()
-                ->sum(fn ($a) => $a->balance()),
+            'outstandingBills' => $outstandingBills,
+            'outstanding' => $outstandingBills->sum(fn ($a) => $a->balance()),
             // Rewards context for the "apply credit" option on each bill.
             'rewardPeso' => $rewards->pesoBalance($request->user()),
             'minRedeemPeso' => $rewards->pesoValue((int) config('rewards.min_redeem_points')),
@@ -106,15 +116,38 @@ class AppointmentController extends Controller
 
         $dentists = User::where('role', UserRole::Dentist)->orderBy('name')->get();
         $dentist = $request->filled('dentist_id') ? $dentists->firstWhere('id', $request->integer('dentist_id')) : null;
-        $date = $request->filled('date') ? Carbon::parse($request->date('date')) : Carbon::today();
+
+        // Explicitly picked date (from the calendar) — bounded to today → +3 months.
+        $date = $request->filled('date') ? Carbon::parse($request->date('date')) : null;
+        if ($date && ($date->isBefore(today()) || $date->gt(now()->addMonths(PredictiveScheduler::MAX_MONTHS_AHEAD)))) {
+            $date = null;
+        }
+
+        // Calendar month being viewed (defaults to the picked date's month, else current).
+        $calMonth = $request->filled('cal') ? Carbon::parse($request->string('cal').'-01') : ($date?->copy() ?? now());
+        $calMonth = $calMonth->startOfMonth();
+        $calMonth = max($calMonth, now()->startOfMonth());
+        $calMonth = min($calMonth, now()->copy()->addMonths(PredictiveScheduler::MAX_MONTHS_AHEAD)->startOfMonth());
 
         $totalDuration = (int) $selected->sum('duration_minutes');
         $totalPrice = (float) $selected->sum('price');
 
-        // Only build the time grid once at least one service + a dentist are chosen.
-        $slots = ($selected->isNotEmpty() && $dentist)
+        // Month availability map + the picked day's time grid.
+        $monthDays = ($selected->isNotEmpty() && $dentist)
+            ? $scheduler->monthOverview($dentist, $calMonth, max(15, $totalDuration))
+            : null;
+        $slots = ($selected->isNotEmpty() && $dentist && $date)
             ? $scheduler->daySlots($dentist, max(15, $totalDuration), $date)
             : null;
+
+        // Follow-up targets: recent visits this booking can be linked to (e.g. braces
+        // adjustments), so charges consolidate on one statement.
+        $patient = RecordController::resolvePatient($request->user());
+        $followTargets = $patient->appointments()
+            ->whereIn('status', [AppointmentStatus::Billed->value, AppointmentStatus::Completed->value])
+            ->where('scheduled_at', '>=', now()->subMonths(6))
+            ->with(['procedures', 'billingStatement', 'payments'])
+            ->latest('scheduled_at')->take(10)->get();
 
         // Decision-Tree recommended slot: best predicted-attendance free slot across
         // dentists. Verified available before it is suggested.
@@ -129,12 +162,16 @@ class AppointmentController extends Controller
             'selectedIds' => $selectedIds->all(),
             'dentist' => $dentist,
             'date' => $date,
+            'calMonth' => $calMonth,
+            'monthDays' => $monthDays,
             'slots' => $slots,
+            'followTargets' => $followTargets,
+            'followId' => $request->integer('parent_appointment_id') ?: null,
             'totalDuration' => $totalDuration,
             'totalPrice' => $totalPrice,
             'recommended' => $recommended,
             // Dentist-sent next-visit recommendations (with one-tap "Book this").
-            'recommendations' => $this->sentRecommendations(RecordController::resolvePatient($request->user())),
+            'recommendations' => $this->sentRecommendations($patient),
         ]);
     }
 
@@ -177,9 +214,16 @@ class AppointmentController extends Controller
             return back()->withInput()->withErrors(['scheduled_at' => $error]);
         }
 
+        // Optional follow-up link — must be the patient's own visit.
+        $parentId = $request->integer('parent_appointment_id') ?: null;
+        if ($parentId && ! $patient->appointments()->whereKey($parentId)->exists()) {
+            $parentId = null;
+        }
+
         $appointment = $patient->appointments()->create([
             'dentist_id' => $dentist->id,
             'service_id' => $services->first()->id, // primary service (back-compat)
+            'parent_appointment_id' => $parentId,
             'scheduled_at' => $start,
             'duration_minutes' => $duration,
             'total_amount' => round((float) $services->sum('price'), 2),
@@ -229,12 +273,24 @@ class AppointmentController extends Controller
         $this->authorize('reschedule', $appointment);
         $appointment->load(['service', 'dentist']);
 
-        $date = $request->filled('date') ? Carbon::parse($request->date('date')) : $appointment->scheduled_at->copy();
+        $date = $request->filled('date') ? Carbon::parse($request->date('date')) : $appointment->scheduled_at->copy()->max(Carbon::today());
+        if ($date->isBefore(today()) || $date->gt(now()->addMonths(PredictiveScheduler::MAX_MONTHS_AHEAD))) {
+            $date = Carbon::today();
+        }
+        $calMonth = $request->filled('cal') ? Carbon::parse($request->string('cal').'-01') : $date->copy();
+        $calMonth = $calMonth->startOfMonth();
+        $calMonth = max($calMonth, now()->startOfMonth());
+        $calMonth = min($calMonth, now()->copy()->addMonths(PredictiveScheduler::MAX_MONTHS_AHEAD)->startOfMonth());
+
+        $duration = max(15, (int) $appointment->duration_minutes);
 
         return view('portal.appointments.reschedule', [
             'appointment' => $appointment,
+            'duration' => $duration,
             'date' => $date,
-            'slots' => $scheduler->daySlots($appointment->dentist, $appointment->duration_minutes, $date),
+            'calMonth' => $calMonth,
+            'monthDays' => $scheduler->monthOverview($appointment->dentist, $calMonth, $duration, $appointment->id),
+            'slots' => $scheduler->daySlots($appointment->dentist, $duration, $date, $appointment->id),
         ]);
     }
 
@@ -292,17 +348,17 @@ class AppointmentController extends Controller
         if ($start->isPast()) {
             return 'Please choose a future date and time.';
         }
-        if (! in_array($start->isoWeekday(), config('clinic.open_days'), true)) {
-            return 'The clinic is closed on that day.';
+        if ($start->gt(now()->addMonths(PredictiveScheduler::MAX_MONTHS_AHEAD))) {
+            return 'Bookings can be made up to 3 months in advance.';
         }
 
-        $open = $start->copy()->setTimeFromTimeString(config('clinic.open_time'));
-        $close = $start->copy()->setTimeFromTimeString(config('clinic.close_time'));
-        if ($start->lt($open) || $start->copy()->addMinutes($duration)->gt($close)) {
-            return 'Please choose a time within clinic hours ('.config('clinic.open_time').'–'.config('clinic.close_time').').';
+        // The dentist's own working hours (custom weekly rules + date blocks) are the
+        // source of truth; isSlotAvailable also rejects overlaps with other bookings.
+        if (! $scheduler->hoursFor($dentist, $start)) {
+            return 'The dentist is not available on that day. Please pick another date.';
         }
         if (! $scheduler->isSlotAvailable($dentist, $start, $duration, $ignoreId)) {
-            return 'That slot is already taken for this dentist. Please pick another time.';
+            return 'That time is not available for this dentist (taken or outside their hours). Please pick another slot.';
         }
 
         return null;

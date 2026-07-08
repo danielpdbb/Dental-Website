@@ -68,19 +68,56 @@
         </tbody>
     </table>
 
+    @php
+        $docPaid = $appointment->amountPaid();
+        $docDue = max(0, (float) $statement->total - $docPaid);
+    @endphp
+
     <table class="totals">
         <tr><td class="muted">Subtotal</td><td class="right">₱{{ number_format((float) $statement->subtotal, 2) }}</td></tr>
         @if ((float) $statement->discount > 0)
             <tr><td class="muted">Discount</td><td class="right">− ₱{{ number_format((float) $statement->discount, 2) }}</td></tr>
         @endif
         <tr class="grand"><td>Total</td><td class="right">₱{{ number_format((float) $statement->total, 2) }}</td></tr>
-        @if ($isInvoice)
-            <tr><td class="muted">Amount paid</td><td class="right">₱{{ number_format($appointment->amountPaid(), 2) }}</td></tr>
-        @endif
+        <tr><td class="muted">Amount paid to date</td><td class="right">₱{{ number_format($docPaid, 2) }}</td></tr>
+        <tr><td class="muted">Outstanding balance</td><td class="right" style="{{ $docDue > 0 ? 'color:#dc2626;font-weight:bold;' : '' }}">₱{{ number_format($docDue, 2) }}</td></tr>
     </table>
 
     @if ($isInvoice)
         <div class="paid-stamp">✓ PAID IN FULL</div>
+    @elseif ($docPaid > 0 && $docDue > 0)
+        <div class="paid-stamp" style="color:#d97706;">◐ PARTIALLY PAID — installment in progress</div>
+    @endif
+
+    @isset($visitSummary)
+        <table class="totals" style="width:60%; margin-left:0; margin-top:20px; border:1px solid #dbeafe; border-radius:4px;">
+            <tr><td colspan="2" style="background:#eff6ff; color:#2563eb; font-weight:bold; padding:8px;">
+                This visit's summary — {{ $visitSummary['visit']->scheduled_at->format('M j, Y') }}
+                {{ $visitSummary['visit']->id === $appointment->id ? '(original visit)' : '(follow-up)' }}
+            </td></tr>
+            <tr><td class="muted" style="padding-left:8px;">Balance brought forward</td><td class="right" style="padding-right:8px;">₱{{ number_format($visitSummary['broughtForward'], 2) }}</td></tr>
+            <tr><td class="muted" style="padding-left:8px;">+ New charges this visit</td><td class="right" style="padding-right:8px;">₱{{ number_format($visitSummary['thisVisitCharges'], 2) }}</td></tr>
+            <tr><td class="muted" style="padding-left:8px;">− Paid on/after this visit</td><td class="right" style="padding-right:8px;">₱{{ number_format($visitSummary['paidThisVisit'], 2) }}</td></tr>
+            <tr class="grand"><td style="padding-left:8px;">Remaining balance (whole account)</td><td class="right" style="padding-right:8px;">₱{{ number_format($visitSummary['remaining'], 2) }}</td></tr>
+        </table>
+        <p class="muted" style="font-size:11px; margin-top:6px;">This box isolates what this specific visit added and what's been paid since, so it's clear alongside the account's full history above.</p>
+    @endisset
+
+    @if ($appointment->payments->where('status', \App\Enums\PaymentStatus::Paid)->isNotEmpty())
+        <table class="items" style="margin-top:18px;">
+            <thead>
+                <tr><th>Payment date</th><th>Method</th><th class="right" style="width:120px;">Amount</th></tr>
+            </thead>
+            <tbody>
+                @foreach ($appointment->payments->where('status', \App\Enums\PaymentStatus::Paid)->sortBy('paid_at') as $pmt)
+                    <tr>
+                        <td>{{ $pmt->paid_at?->format('M j, Y g:i A') ?? '—' }}</td>
+                        <td>{{ $pmt->method->label() ?? ucfirst($pmt->method->value) }}</td>
+                        <td class="right">₱{{ number_format((float) $pmt->amount, 2) }}</td>
+                    </tr>
+                @endforeach
+            </tbody>
+        </table>
     @endif
 
     <div class="foot">

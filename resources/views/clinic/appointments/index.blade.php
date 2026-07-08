@@ -50,9 +50,24 @@
                 <option value="{{ $dentist->id }}" @selected((string) ($filters['dentist_id'] ?? '') === (string) $dentist->id)>{{ $dentist->name }}</option>
             @endforeach
         </select>
-        <input type="date" name="date" value="{{ $filters['date'] ?? '' }}" class="h-10 px-3 rounded-lg border border-slate-200 text-sm outline-none focus:border-brand-blue" />
-        @if ($q || ! empty($filters['dentist_id']) || ! empty($filters['date']))
-            <a href="{{ route('clinic.appointments.index', ['tab' => $tab]) }}" hx-boost="true" class="h-10 px-3 inline-flex items-center rounded-lg border border-slate-200 text-slate-500 text-sm hover:bg-slate-50">Clear</a>
+        @if (count($tabStatuses) > 1)
+            <select name="status" class="h-10 px-3 min-w-[10rem] rounded-lg border border-slate-200 text-sm outline-none focus:border-brand-blue">
+                <option value="">All {{ $tab }} statuses</option>
+                @foreach ($tabStatuses as $ts)
+                    <option value="{{ $ts }}" @selected($status === $ts)>{{ \App\Enums\AppointmentStatus::from($ts)->label() }}</option>
+                @endforeach
+            </select>
+        @endif
+        <div class="flex items-center gap-1.5">
+            <input type="date" name="date" value="{{ $filters['date'] ?? '' }}" class="h-10 px-3 rounded-lg border border-slate-200 text-sm outline-none focus:border-brand-blue" />
+            @php $dateBase = array_filter(['tab' => $tab, 'q' => $q, 'dentist_id' => $filters['dentist_id'] ?? null, 'status' => $status]); @endphp
+            <a href="{{ route('clinic.appointments.index', $dateBase + ['date' => today()->toDateString()]) }}" hx-boost="true"
+               class="h-10 px-3 inline-flex items-center rounded-lg text-xs font-medium transition {{ ($filters['date'] ?? '') === today()->toDateString() ? 'gradient-brand text-white' : 'border border-slate-200 text-slate-500 hover:bg-slate-50' }}">Today</a>
+            <a href="{{ route('clinic.appointments.index', $dateBase + ['date' => today()->addDay()->toDateString()]) }}" hx-boost="true"
+               class="h-10 px-3 inline-flex items-center rounded-lg text-xs font-medium transition {{ ($filters['date'] ?? '') === today()->addDay()->toDateString() ? 'gradient-brand text-white' : 'border border-slate-200 text-slate-500 hover:bg-slate-50' }}">Tomorrow</a>
+        </div>
+        @if ($q || ! empty($filters['dentist_id']) || ! empty($filters['date']) || $status)
+            <a href="{{ route('clinic.appointments.index', ['tab' => $tab]) }}" hx-boost="true" class="h-10 px-3 inline-flex items-center rounded-lg border border-slate-200 text-slate-500 text-sm hover:bg-slate-50">Clear filters</a>
         @endif
     </form>
 
@@ -74,7 +89,10 @@
                     <tr class="hover:bg-slate-50/60">
                         <td class="px-5 py-3 whitespace-nowrap">{{ $appt->scheduled_at->format('M j, g:i A') }} @if($appt->is_walk_in)<span class="text-xs text-amber-600">(walk-in)</span>@endif</td>
                         <td class="px-5 py-3 font-medium text-slate-800">{{ $appt->patient?->fullName() ?? '—' }}</td>
-                        <td class="px-5 py-3 text-slate-500">{{ \Illuminate\Support\Str::limit($appt->proceduresLabel(), 40) }}</td>
+                        <td class="px-5 py-3 text-slate-500">
+                            {{ \Illuminate\Support\Str::limit($appt->proceduresLabel(), 40) }}
+                            @if ($appt->parent_appointment_id)<span class="ml-1 inline-flex px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-brand-blue/10 text-brand-blue">Follow-up</span>@endif
+                        </td>
                         <td class="px-5 py-3 text-slate-500">{{ $appt->dentist?->name ?? '—' }}</td>
                         <td class="px-5 py-3"><span class="px-2.5 py-0.5 rounded-full text-xs font-medium {{ $appt->status->badgeClasses() }}">{{ $appt->status->label() }}</span></td>
                         <td class="px-5 py-3">

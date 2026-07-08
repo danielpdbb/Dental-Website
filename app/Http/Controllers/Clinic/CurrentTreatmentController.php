@@ -27,6 +27,7 @@ class CurrentTreatmentController extends Controller
         $appointment->load([
             'patient', 'procedures.service', 'procedures.performer',
             'intake', 'finding', 'recommendations.service', 'toothRecords.recorder',
+            'parent.billingStatement', 'followUps',
         ]);
 
         // History of tooth records for THIS patient across all their visits (timeline).

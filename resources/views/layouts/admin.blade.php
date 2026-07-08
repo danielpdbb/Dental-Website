@@ -55,6 +55,7 @@
         $links = array_filter([
             ['Dashboard', 'admin.dashboard', 'admin.dashboard', $isMgmt],
             ['My schedule', 'clinic.my-schedule', 'clinic.my-schedule', $isDentist || $isMgmt],
+            ['Availability', 'clinic.availability', 'clinic.availability*', $isDentist || $isMgmt],
             ['Appointments', 'clinic.appointments.index', 'clinic.appointments.*', $canDesk],
             ['Billing', 'clinic.billing.index', 'clinic.billing.*', $canDesk],
             ['Patients', 'clinic.patients.index', 'clinic.patients.*', true],

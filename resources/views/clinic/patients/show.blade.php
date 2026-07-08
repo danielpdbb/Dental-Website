@@ -37,6 +37,30 @@
         </div>
     </div>
 
+    {{-- Unpaid bills / installments — what's owed, for which procedures, on which statement --}}
+    @php $unpaidBills = $patient->appointments->filter(fn ($a) => $a->status === \App\Enums\AppointmentStatus::Billed && $a->balance() > 0)->sortByDesc('scheduled_at'); @endphp
+    @if ($unpaidBills->isNotEmpty())
+        <div class="mt-6 rounded-2xl bg-white border border-red-200/70 p-6 shadow-soft">
+            <h3 class="font-display text-lg font-bold text-red-600">Outstanding bills / installments</h3>
+            <p class="text-xs text-slate-400 mt-0.5 mb-3">Partial payments are welcome — record them from the appointment's billing panel.</p>
+            <div class="divide-y divide-slate-100">
+                @foreach ($unpaidBills as $ub)
+                    <div class="flex flex-wrap items-center justify-between gap-3 py-2.5 text-sm">
+                        <div class="min-w-0">
+                            <div class="font-medium text-slate-800">{{ $ub->billingStatement?->statement_no ?? 'Statement pending' }} <span class="text-slate-400 font-normal">· {{ $ub->scheduled_at->format('M j, Y') }}</span></div>
+                            <div class="text-xs text-slate-500">{{ \Illuminate\Support\Str::limit($ub->proceduresLabel(), 60) }}</div>
+                            <div class="text-xs text-slate-400">Billed ₱{{ number_format($ub->total_amount, 2) }} · Paid ₱{{ number_format($ub->amountPaid(), 2) }}</div>
+                        </div>
+                        <div class="flex items-center gap-3 shrink-0">
+                            <span class="font-display font-bold text-red-500">₱{{ number_format($ub->balance(), 2) }} due</span>
+                            <a href="{{ route('clinic.appointments.show', $ub) }}" class="text-xs font-medium text-brand-blue hover:underline">Manage / pay →</a>
+                        </div>
+                    </div>
+                @endforeach
+            </div>
+        </div>
+    @endif
+
     <!-- Allergies -->
     <div class="mt-6 rounded-2xl bg-white border border-slate-200/60 p-6 shadow-soft">
         <h3 class="font-display text-lg font-bold">Allergies</h3>

@@ -6,8 +6,46 @@
 @section('content')
     <div class="flex items-center justify-between">
         <a href="{{ route('clinic.appointments.index') }}" class="text-sm text-slate-500 hover:text-brand-blue">← All appointments</a>
-        <a href="{{ route('clinic.appointments.treatment', $appointment) }}" class="text-sm font-medium text-brand-blue hover:underline">Record treatment →</a>
+        {{-- Recording treatment is clinical work — dentists (and management) only. --}}
+        @if (in_array(auth()->user()->role, [\App\Enums\UserRole::Dentist, \App\Enums\UserRole::Management], true))
+            <a href="{{ route('clinic.appointments.treatment', $appointment) }}" class="text-sm font-medium text-brand-blue hover:underline">Record treatment →</a>
+        @endif
     </div>
+
+    {{-- Follow-up linkage: one consolidated bill across the chain --}}
+    @if ($appointment->parent)
+        <div class="mt-3 rounded-xl border border-brand-blue/30 bg-brand-blue/5 px-4 py-3 text-sm text-slate-700">
+            <div>
+                This is a <strong>follow-up</strong> of the {{ $appointment->parent->scheduled_at->format('M j, Y') }} visit
+                — charges and payments consolidate on
+                <a href="{{ route('clinic.appointments.show', $appointment->parent) }}" class="font-medium text-brand-blue hover:underline">appointment #{{ $appointment->parent->id }}{{ $appointment->parent->billingStatement ? ' · '.$appointment->parent->billingStatement->statement_no : '' }}</a>.
+            </div>
+            @if ($appointment->parent->billingStatement)
+                <a href="{{ route('clinic.appointments.billing.print', [$appointment->parent, 'bill']) }}?visit={{ $appointment->id }}" target="_blank" class="mt-2 inline-flex items-center gap-1 text-xs font-medium text-brand-blue hover:underline">
+                    Print just this visit's summary (brought forward + new charges + paid) →
+                </a>
+                @if ($appointment->parent->billingStatement->invoice_no)
+                    <a href="{{ route('clinic.appointments.billing.print', [$appointment->parent, 'invoice']) }}?visit={{ $appointment->id }}" target="_blank" class="ml-3 mt-2 inline-flex text-xs font-semibold text-emerald-700 hover:underline">Print separate follow-up invoice</a>
+                @endif
+            @endif
+        </div>
+    @endif
+    @if ($appointment->followUps->isNotEmpty())
+        <div class="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+            <div class="font-medium mb-1.5">Follow-up visits on this bill:</div>
+            <div class="space-y-1">
+                @foreach ($appointment->followUps as $fu)
+                    <div class="flex items-center gap-2">
+                        <a href="{{ route('clinic.appointments.show', $fu) }}" class="text-brand-blue hover:underline">{{ $fu->scheduled_at->format('M j, Y') }}</a>
+                        @if ($appointment->billingStatement)
+                            <a href="{{ route('clinic.appointments.billing.print', [$appointment, 'bill']) }}?visit={{ $fu->id }}" target="_blank" class="text-xs text-slate-400 hover:text-brand-blue hover:underline">· print this visit's summary</a>
+                            @if ($appointment->billingStatement->invoice_no)<a href="{{ route('clinic.appointments.billing.print', [$appointment, 'invoice']) }}?visit={{ $fu->id }}" target="_blank" class="text-xs font-semibold text-emerald-700 hover:underline">· separate invoice</a>@endif
+                        @endif
+                    </div>
+                @endforeach
+            </div>
+        </div>
+    @endif
 
     <div class="mt-4 grid lg:grid-cols-3 gap-6">
         <!-- Details + status -->
@@ -97,16 +135,22 @@
                         <button class="h-9 px-4 rounded-lg border border-slate-200 text-slate-600 text-sm font-medium hover:bg-slate-50 transition">Cancel appointment</button>
                     </form>
                 </div>
-                <form method="POST" action="{{ route('clinic.appointments.reschedule', $appointment) }}" class="mt-3 flex flex-wrap items-end gap-2">
-                    @csrf
-                    @method('PUT')
-                    <div>
-                        <label class="block text-xs text-slate-500 mb-1">Reschedule to</label>
-                        <input type="datetime-local" name="scheduled_at" value="{{ $appointment->scheduled_at->format('Y-m-d\TH:i') }}"
-                            class="h-9 px-3 rounded-lg border border-slate-200 text-sm outline-none focus:border-brand-blue" />
-                    </div>
-                    <button class="h-9 px-4 rounded-lg bg-slate-800 text-white text-sm font-medium hover:bg-slate-700 transition">Reschedule</button>
-                </form>
+                <div class="mt-3">
+                    <button type="button" id="reschedule-toggle"
+                        hx-get="{{ route('clinic.appointments.reschedule.form', $appointment) }}" hx-target="#reschedule-box" hx-swap="outerHTML"
+                        class="h-9 px-4 rounded-lg border border-slate-200 text-slate-600 text-sm font-medium hover:bg-slate-50 transition inline-flex items-center gap-1.5">
+                        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path stroke-linecap="round" d="M8 2v4m8-4v4M3 10h18"/></svg>
+                        Change date &amp; time
+                    </button>
+                    <div id="reschedule-box"></div>
+                </div>
+                <script>
+                    document.addEventListener('click', function (e) {
+                        if (e.target.closest && e.target.closest('[data-reschedule-close]')) {
+                            document.getElementById('reschedule-box').innerHTML = '';
+                        }
+                    });
+                </script>
             @endif
         </div>
 
