@@ -40,6 +40,14 @@
                         <div class="font-medium">{{ $referral->service?->name ?? 'General referral' }}</div>
                         <p class="text-sm text-slate-500 mt-1">{{ $referral->reason }}</p>
                         <div class="text-xs text-slate-400 mt-1">Requested {{ $referral->created_at->format('M j, Y') }}</div>
+                        @if ($referral->hasLetter())
+                            <a href="{{ route('portal.referrals.letter', $referral) }}" target="_blank"
+                               class="mt-2 inline-flex items-center gap-1.5 h-9 px-3 rounded-lg bg-brand-blue/10 text-brand-blue text-xs font-semibold hover:bg-brand-blue/20 transition">
+                                <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3M4 7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7z"/></svg>
+                                View referral letter ({{ $referral->letter_no }})
+                            </a>
+                            <div class="text-[11px] text-slate-400 mt-1">Referred to {{ $referral->referred_to_name }}{{ $referral->referred_to_clinic ? ' · '.$referral->referred_to_clinic : '' }} — present this letter at your appointment.</div>
+                        @endif
                     </div>
                     <span class="px-2.5 py-0.5 rounded-full text-xs font-medium {{ $referral->status->badgeClasses() }}">{{ $referral->status->label() }}</span>
                 </div>

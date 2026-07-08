@@ -6,7 +6,13 @@ every feature, and a full reference of all routes.
 > Companion docs: [AUTH_AND_ADMIN.md](AUTH_AND_ADMIN.md), [PATIENT_MANAGEMENT.md](PATIENT_MANAGEMENT.md),
 > [APPOINTMENT_MANAGEMENT.md](APPOINTMENT_MANAGEMENT.md), [PAYMENT_AND_BILLING.md](PAYMENT_AND_BILLING.md),
 > [REFERRAL_REWARDS.md](REFERRAL_REWARDS.md), [PASSWORD_RESET.md](PASSWORD_RESET.md),
-> [CODE_EXPLAINED_REWARDS_AND_AUTH.md](CODE_EXPLAINED_REWARDS_AND_AUTH.md), [AUDIT.md](AUDIT.md).
+> [CODE_EXPLAINED_REWARDS_AND_AUTH.md](CODE_EXPLAINED_REWARDS_AND_AUTH.md), [AUDIT.md](AUDIT.md),
+> and the consolidated **[July 8 revisions guide](revisions.md)**.
+>
+> **Newest features** (calendar booking, dentist availability, follow-up consolidated
+> billing, installments, referral letters, PH-style registration) have their own
+> click-by-click test guides in **[revisions.md](revisions.md)** and
+> **[July8.md § How to test each feature](July8.md)**.
 
 ---
 
@@ -69,8 +75,9 @@ dashboard with a "no permission" toast** (not a bare 403).
 ### 4.1 Visitor (not logged in)
 1. Browse **Home / Services / About / Contact**. The **Services** page prices come live
    from the database (Admin → Services).
-2. **Register** at `/register`: fill name, username, email, **mobile, gender, date of
-   birth, address**, password. The **Create account** button stays **disabled** until you
+2. **Register** at `/register`: fill name, username, email, mobile, gender, the compact
+   **Month / Day / Year birthday dropdowns**, Philippine address parts, and password.
+   The **Create account** button stays **disabled** until you
    tick the **Data Privacy consent** box; click the **"Data Privacy Consent"** link to read
    the modal. Submit → you're logged in and sent to the verify-email screen.
 3. **Verify email:** a **clinic-branded** email is sent. With Gmail SMTP configured it
@@ -89,11 +96,11 @@ Logs in → `/dashboard` (quick-link cards).
 | Test | Steps | Expected |
 |---|---|---|
 | My record | Dashboard → **My record** (`/portal/record`) | Read-only details, allergies, and **treatment history** with a per-row **View details** modal (procedure, date, dentist, fee, all procedures + total for that visit) |
-| Book | **Book** → pick service + dentist + date → click an **available time tile** (greyed = taken) → Confirm | Success toast; under "Upcoming" |
-| Reschedule | Upcoming appointment → **Reschedule** → new date → pick a tile → Confirm | Moves to new time |
+| Book | **Book** → choose one or more services + dentist → green calendar date → available time tile → Confirm | Two-column booking view; combined duration/end time is correct and every consumed slot is highlighted |
+| Reschedule | Upcoming appointment → **Reschedule** → calendar date → duration-aware time tile → Confirm | Moves to the validated new time |
 | Cancel | Upcoming → **Cancel** (styled confirm modal) | Status → Cancelled |
 | Balance | Portal → **Appointments** | Red outstanding banner + per-appointment balance (if owed) |
-| **Balance breakdown** | outstanding card → **Show breakdown** | Modal lists each unpaid billed visit: statement no., charged/paid, total due |
+| **Balance breakdown** | outstanding card → **Show breakdown** | Modal lists every current or old unpaid bill, itemized charges, payments received, balance, and an inline partial-payment action |
 | Next-visit recommendation | Portal → **Appointments** | If a dentist sent one, a compact recommendation bar appears with a "Which data was used?" disclaimer |
 | Pay online | Appointment with a balance → **Pay online** (amount editable) → PayMongo test page → Authorize | Redirected back; payment recorded; balance drops |
 | Referral (clinical) | **Referrals** → reason → Submit | Appears as *Requested* |
@@ -113,9 +120,10 @@ Logs in → `/clinic/appointments`.
 | **Status tabs** | Top of `/clinic/appointments`: **Active / Billed / Finished** | Active = booked/in-treatment/for-billing; Billed = awaiting payment; Finished = completed/no-show/cancelled — each with a live count |
 | **Live patient search** | Type a name or phone in the search box | Table filters server-side as you type (300 ms debounce) — scales to thousands |
 | Filters | dentist / date filters; **Clear** | Filtered table with balance/paid column |
-| Walk-in / book | **New / walk-in** → existing or new patient → service/dentist/time → Create | Created |
+| **Find existing patient while booking** | **New / walk-in** → type name or phone beside Existing patient → open dropdown | Dropdown is filtered; no long manual scroll |
+| Walk-in / book | **New / walk-in** → existing patient or first/last/phone for a walk-in → services → dentist → calendar/time → Create | Two-column form; existing details lock; walk-in Create remains disabled until identity is complete |
 | Status | Manage an appt → **Complete / No-show / Cancel** | Status updates |
-| Reschedule | Manage an appt → **Reschedule to** date/time | Moves (re-validated) |
+| Reschedule | Manage an appt → **Reschedule** → calendar date/time | Same duration-aware calendar and slot highlighting as booking; moves after re-validation |
 | **Billing queue** | `/clinic/billing` (or dashboard "Awaiting billing") | Visits dentists endorsed, ready to bill |
 | **Issue bill** | Manage an endorsed visit → **Billing** → itemised lines → issue statement | Per-visit statement/invoice (printable) |
 | **Payment** | Manage → Billing → amount (partial allowed) + method → **Record payment** | Balance drops; overpay rejected |
@@ -130,7 +138,8 @@ Logs in → `/clinic/my-schedule`.
 
 | Test | Steps | Expected |
 |---|---|---|
-| My schedule | day view; **Prev / Today / Next** | That day's appointments |
+| My schedule | `/clinic/my-schedule` → navigate month → click a tile; switch Month / Day | Month grid by default; modal shows details and Treatment/View patient actions; Day shows the timeline |
+| Availability | `/clinic/availability` → click a future calendar date → Off or **Custom hours open** → Save | Calendar is the only date picker; selected-date summary appears and booking calendars honor the rule |
 | Open a visit | a booked/in-treatment appointment → **Treatment** | Opens the current-treatment workspace (`…/treatment`) |
 | Pre-visit assessment | top card | Patient's Stage-1 answers + **AI possible-treatment** suggestion (staff-only) with a "Which data was used?" disclaimer; **+ Add suggested treatment** if applicable |
 | **Add procedure** | Procedures → pick a service, **Tooth (optional)**, notes → **Add** | Line appears; if a tooth was chosen it shows a **"Tooth 16 (Univ 3)"** badge |
@@ -152,6 +161,7 @@ Logs in at `/admin/login` → `/admin`.
 | Users | search/role filter; create; edit | Avatars shown; **patient edit = status only** + read-only profile panel |
 | Services & pricing | search/filter; create/edit/delete | CRUD works |
 | Analytics | `/admin/analytics` | Appointments, **paid revenue**, **outstanding**, no-show/cancellation, 6-mo trend; charts load async |
+| Dentist availability | `/clinic/availability` → select dentist → manage specific date/weekly rules | Wide dentist selector; management can edit any dentist |
 | Full access | `/clinic/*` areas | Allowed (Management can do everything) |
 
 ---
@@ -266,6 +276,14 @@ Regenerate anytime: `php artisan route:list --except-vendor`.
 | PATCH | `…/recommendations/{recommendation}` | clinic.patients.recommendations.status |
 | GET | `/clinic/my-schedule` | clinic.my-schedule |
 
+### Clinic — dentist availability (role: dentist, management)
+| Method | URL | Name |
+|---|---|---|
+| GET | `/clinic/availability` | clinic.availability |
+| POST | `/clinic/availability/weekly` | clinic.availability.weekly |
+| POST | `/clinic/availability/override` | clinic.availability.override |
+| DELETE | `/clinic/availability/override/{schedule}` | clinic.availability.override.remove |
+
 ### Clinic — appointment desk (role: receptionist, management)
 | Method | URL | Name |
 |---|---|---|
@@ -277,6 +295,7 @@ Regenerate anytime: `php artisan route:list --except-vendor`.
 | POST | `…/{appointment}/complete` | clinic.appointments.complete |
 | POST | `…/{appointment}/no-show` | clinic.appointments.no-show |
 | PUT | `…/{appointment}/reschedule` | clinic.appointments.reschedule |
+| GET | `…/{appointment}/reschedule` | clinic.appointments.reschedule.form |
 | POST | `…/{appointment}/payment` | clinic.appointments.payment.store |
 | POST | `…/{appointment}/redeem-rewards` | clinic.appointments.redeem-rewards |
 | POST | `…/{appointment}/billing` | clinic.appointments.billing.store |
@@ -331,10 +350,12 @@ Regenerate anytime: `php artisan route:list --except-vendor`.
 | Earn rewards (qualifying visit) | complete a referred patient's first appointment |
 | Spend rewards (discount on bill) | portal Appointments or clinic Billing panel |
 | Avatar upload | `/profile` |
-| Time-slot tile booking | `/portal/appointments/book` |
-| Partial payments + balance | clinic appointment **Billing** panel |
+| Two-column calendar booking + consumed-slot highlighting | `/portal/appointments/book`, `/clinic/appointments/create` |
+| Searchable existing-patient booking dropdown | `/clinic/appointments/create` |
+| Partial payments + inline outstanding breakdown/payment | clinic Billing and `/portal/appointments` |
 | Online payment (PayMongo, test mode) | portal Appointments → **Pay online** |
-| Dentist daily schedule | `/clinic/my-schedule` |
+| Dentist month calendar, tile modal, and day timeline | `/clinic/my-schedule` |
+| Specific-date and weekly dentist availability | `/clinic/availability` |
 | Current-treatment workspace (procedures, performed, endorse) | `/clinic/appointments/{id}/treatment` |
 | Optional tooth on a procedure line | treatment workspace → Add procedure → **Tooth (optional)** |
 | Interactive dental chart + full-history toggle | treatment workspace, or `/portal/record` (read-only) |
@@ -342,6 +363,7 @@ Regenerate anytime: `php artisan route:list --except-vendor`.
 | Predictive scheduling (attendance risk + slot ranking) | `/clinic/scheduling` |
 | "Which data was used?" AI disclaimers | any AI suggestion (treatment, scheduling, portal) |
 | Itemised billing + printable invoice | clinic appointment → Billing |
+| Consolidated follow-up bill + visit-specific invoice summary | linked follow-up appointment → Billing |
 | Appointment status tabs + live search | `/clinic/appointments` |
 | Outstanding receivables | `/admin/analytics` |
 

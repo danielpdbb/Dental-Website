@@ -7,21 +7,31 @@ A Laravel-based dental clinic website with public pages, patient accounts, appoi
 - Public homepage, services, about, and contact pages
 - Patient registration, login, email verification, profile editing, and password update
 - Patient dashboard with dental records, appointments, referrals, and online payment flow
-- Appointment booking, cancellation, and rescheduling
+- Two-column, multi-service appointment booking and rescheduling with month calendars,
+  duration-aware slot ranges, and consumed-slot highlighting
 - **Full appointment lifecycle**: booked → in-treatment → for-billing → billed → completed
 - **Dentist "current treatment" workspace**: add procedures (each with an **optional tooth**), mark them performed, then **endorse to reception** for billing (with a confirmation gate when some procedures weren't performed)
 - **Interactive dental chart (odontogram)**: per-visit and full-patient-history views, FDI + Universal numbering, link a tooth annotation to a procedure
-- **Itemised billing & invoices**: per-visit statements, partial payments, printable invoice/recommendation slips
+- **Itemised billing & invoices**: partial-payment history, persistent outstanding balances,
+  consolidated follow-up billing, full statements, and visit-specific invoice summaries
 - **AI / Machine Learning** (decision-support only):
   - Predictive scheduling — a Decision Tree that estimates attendance risk and suggests optimal slots
   - Procedure recommendation — regression models for a possible current treatment (Stage 1) and a recommended next visit (Stage 2)
   - "Which data was used?" transparency disclaimers everywhere AI output appears
 - **Referral rewards**: refer-a-friend codes/links, points earned on qualifying visits, redeemable against bills
 - Clinic back-office for patient records, allergies, treatments, recommendations, referrals, and scheduling
-- Receptionist/management appointment desk with **status tabs (Active / Billed / Finished)** and **live server-side patient search**, plus payment recording
-- Dentist schedule view
+- Receptionist/management appointment desk with **status tabs**, live list search, and a
+  searchable name/phone patient selector while creating an appointment
+- Dentist availability management with specific-date and weekly rules
+- Google-Calendar-style dentist month schedule, appointment detail modal, and day timeline
 - Admin dashboard (revenue, today's load, outstanding, needs-attention queues) and analytics
 - Role-based access for patients, receptionists, dentists, and management users
+
+## Documentation
+
+- [Website walkthrough and testing](docs/WALKTHROUGH_AND_TESTING.md)
+- [July 8 revisions and verification checklist](docs/revisions.md)
+- [Detailed July 8 implementation notes](docs/July8.md)
 
 ## Requirements
 
@@ -306,10 +316,12 @@ php artisan test
 - Patient dashboard
 - View personal dental record
 - View allergies, treatment history, and procedure recommendations
-- Book appointments
+- Book one or more services in a two-column calendar/time workspace
 - View appointments
 - Reschedule appointments
 - Cancel appointments
+- Review current or older outstanding bills, prior payments, and pay partially from the
+  balance-breakdown modal
 - Pay for appointments through the online payment flow
 - View payment success and cancellation pages
 - Request referrals
@@ -325,9 +337,12 @@ php artisan test
 - Add and remove allergies
 - Add, edit, update, and remove treatment records
 - Add, edit, update, and change statuses for procedure recommendations
-- View dentist daily schedule
+- View dentist month calendar or detailed day timeline; open appointment tiles in a modal
+- Manage dentist weekly availability and specific-date blocks/custom hours
 - List and filter appointments
-- Create regular and walk-in appointments
+- Create regular and walk-in appointments in a two-column calendar workspace
+- Search the existing-patient dropdown by name or phone; selected patient fields lock
+- Require first name, last name, and phone before enabling a new walk-in booking
 - View appointment details
 - Cancel, complete, no-show, and reschedule appointments
 - Record appointment payments
@@ -357,6 +372,7 @@ php artisan test
 - Predictive scheduling: attendance-risk Decision Tree and optimal-slot suggestions
 - "Which data was used?" transparency disclaimers on AI output
 - Itemised billing statements, partial payments, printable invoices and recommendation slips
+- Follow-up appointment badges and consolidated billing with visit-specific summaries
 
 ### Integrations and Local Data
 
@@ -438,8 +454,9 @@ Log in as receptionist, dentist, or management depending on the page.
 | `http://127.0.0.1:8000/clinic/patients/{patient}/treatments/{treatment}/edit` | Receptionist, dentist, management | Edit treatment form |
 | `http://127.0.0.1:8000/clinic/patients/{patient}/recommendations/{recommendation}/edit` | Receptionist, dentist, management | Edit recommendation form |
 | `http://127.0.0.1:8000/clinic/my-schedule` | Dentist, receptionist, management | Dentist schedule page |
+| `http://127.0.0.1:8000/clinic/availability` | Dentist, management | Weekly hours and calendar-based specific-date availability |
 | `http://127.0.0.1:8000/clinic/appointments` | Receptionist, management | Appointment desk and filters |
-| `http://127.0.0.1:8000/clinic/appointments/create` | Receptionist, management | Create appointment / walk-in form |
+| `http://127.0.0.1:8000/clinic/appointments/create` | Receptionist, management | Two-column appointment/walk-in form with searchable patient selector |
 | `http://127.0.0.1:8000/clinic/appointments/{appointment}` | Receptionist, management | Appointment details, status actions, and payment section |
 | `http://127.0.0.1:8000/clinic/referrals` | Receptionist, management | Referral tracking and status updates |
 | `http://127.0.0.1:8000/clinic/scheduling` | Receptionist, management | Predictive scheduling / available slot finder |
@@ -581,7 +598,11 @@ These routes require receptionist, dentist, or management access.
 | GET | `/clinic/patients/{patient}/recommendations/{recommendation}/edit` | `clinic.patients.recommendations.edit` | Show edit recommendation form |
 | PUT | `/clinic/patients/{patient}/recommendations/{recommendation}` | `clinic.patients.recommendations.update` | Update recommendation |
 | PATCH | `/clinic/patients/{patient}/recommendations/{recommendation}` | `clinic.patients.recommendations.status` | Update recommendation status |
-| GET | `/clinic/my-schedule` | `clinic.my-schedule` | View dentist daily schedule |
+| GET | `/clinic/my-schedule` | `clinic.my-schedule` | View dentist month calendar or day timeline |
+| GET | `/clinic/availability` | `clinic.availability` | Manage dentist availability (dentist/management) |
+| POST | `/clinic/availability/weekly` | `clinic.availability.weekly` | Save recurring weekly rules |
+| POST | `/clinic/availability/override` | `clinic.availability.override` | Save a specific-date block/custom hours |
+| DELETE | `/clinic/availability/override/{schedule}` | `clinic.availability.override.remove` | Remove a date override |
 
 ### Clinic Appointment, Referral, and Scheduling Routes
 
@@ -596,6 +617,7 @@ These routes require receptionist or management access.
 | POST | `/clinic/appointments/{appointment}/cancel` | `clinic.appointments.cancel` | Cancel appointment |
 | POST | `/clinic/appointments/{appointment}/complete` | `clinic.appointments.complete` | Mark appointment completed |
 | POST | `/clinic/appointments/{appointment}/no-show` | `clinic.appointments.no-show` | Mark appointment no-show |
+| GET | `/clinic/appointments/{appointment}/reschedule` | `clinic.appointments.reschedule.form` | Show calendar rescheduling interface |
 | PUT | `/clinic/appointments/{appointment}/reschedule` | `clinic.appointments.reschedule` | Reschedule appointment |
 | POST | `/clinic/appointments/{appointment}/payment` | `clinic.appointments.payment.store` | Record appointment payment |
 | POST | `/clinic/appointments/{appointment}/redeem-rewards` | `clinic.appointments.redeem-rewards` | Apply patient's reward points to the bill |

@@ -14,6 +14,11 @@
                 <option value="registered" @selected(($filters['account'] ?? '') === 'registered')>Registered (with account)</option>
                 <option value="walkin" @selected(($filters['account'] ?? '') === 'walkin')>Walk-in (no login)</option>
             </select>
+            <select name="balance" onchange="this.form.requestSubmit()" class="h-10 px-3 min-w-[13rem] rounded-lg border border-slate-200 text-sm outline-none focus:border-brand-blue">
+                <option value="">Any balance</option>
+                <option value="with" @selected(($filters['balance'] ?? '') === 'with')>With outstanding balance</option>
+                <option value="without" @selected(($filters['balance'] ?? '') === 'without')>No balance (fully settled)</option>
+            </select>
             <button type="submit" class="h-10 px-4 rounded-lg bg-slate-800 text-white text-sm font-medium hover:bg-slate-700 transition">Filter</button>
         </form>
 

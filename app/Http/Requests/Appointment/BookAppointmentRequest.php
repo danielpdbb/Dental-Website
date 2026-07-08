@@ -25,7 +25,9 @@ class BookAppointmentRequest extends FormRequest
             'service_ids' => ['required', 'array', 'min:1'],
             'service_ids.*' => [Rule::exists('services', 'id')->where('is_active', true)],
             'dentist_id' => ['required', Rule::exists('users', 'id')->where('role', 'dentist')],
-            'scheduled_at' => ['required', 'date', 'after:now'],
+            'scheduled_at' => ['required', 'date', 'after:now',
+                'before:'.now()->addMonths(\App\Services\PredictiveScheduler::MAX_MONTHS_AHEAD)->addDay()->toDateString()],
+            'parent_appointment_id' => ['nullable', 'integer', 'exists:appointments,id'],
             'notes' => ['nullable', 'string', 'max:1000'],
         ];
     }

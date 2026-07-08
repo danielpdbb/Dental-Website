@@ -31,8 +31,10 @@ class StoreClinicAppointmentRequest extends FormRequest
             'service_ids' => ['required', 'array', 'min:1'],
             'service_ids.*' => [Rule::exists('services', 'id')->where('is_active', true)],
             'dentist_id' => ['required', Rule::exists('users', 'id')->where('role', 'dentist')],
-            // Walk-ins are recorded at the current time, so a slot is only required for scheduled bookings.
-            'scheduled_at' => [Rule::requiredIf(fn () => ! $this->boolean('is_walk_in')), 'nullable', 'date'],
+            // Walk-ins also pick a real slot (today's next free one) to avoid conflicts.
+            'scheduled_at' => ['required', 'date', 'after:-15 minutes',
+                'before:'.now()->addMonths(\App\Services\PredictiveScheduler::MAX_MONTHS_AHEAD)->addDay()->toDateString()],
+            'parent_appointment_id' => ['nullable', 'integer', 'exists:appointments,id'],
             'notes' => ['nullable', 'string', 'max:1000'],
         ];
     }
@@ -48,15 +50,23 @@ class StoreClinicAppointmentRequest extends FormRequest
         return ['new_phone.regex' => \App\Support\Phone::message()];
     }
 
-    /**
-     * Require either an existing patient or a new walk-in name.
-     */
+    /** Require either an existing patient or a complete quick walk-in profile. */
     public function after(): array
     {
         return [
             function (Validator $validator) {
-                if (! $this->filled('patient_id') && ! $this->filled('new_first_name')) {
-                    $validator->errors()->add('patient_id', 'Select an existing patient or enter a walk-in name.');
+                if ($this->filled('patient_id')) {
+                    return;
+                }
+
+                foreach ([
+                    'new_first_name' => 'First name is required for a walk-in patient.',
+                    'new_last_name' => 'Last name is required for a walk-in patient.',
+                    'new_phone' => 'Phone number is required for a walk-in patient.',
+                ] as $field => $message) {
+                    if (! $this->filled($field)) {
+                        $validator->errors()->add($field, $message);
+                    }
                 }
             },
         ];

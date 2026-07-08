@@ -40,9 +40,13 @@ class AppointmentController extends Controller
         // Live patient search — server-side LIKE so it scales past thousands of records.
         $q = $request->string('q')->trim()->value();
 
+        // Optional status filter — only statuses that belong to the active tab.
+        $status = $request->string('status')->toString();
+        $status = in_array($status, self::TABS[$tab], true) ? $status : null;
+
         $appointments = Appointment::query()
             ->with(['patient', 'dentist', 'service', 'payments', 'procedures'])
-            ->whereIn('status', self::TABS[$tab])
+            ->whereIn('status', $status ? [$status] : self::TABS[$tab])
             ->when($request->filled('dentist_id'), fn ($qr) => $qr->where('dentist_id', $request->integer('dentist_id')))
             ->when($request->filled('date'), fn ($qr) => $qr->whereDate('scheduled_at', $request->date('date')))
             ->when($q, fn ($qr) => $qr->whereHas('patient', fn ($p) => $p
@@ -69,6 +73,8 @@ class AppointmentController extends Controller
             'dentists' => User::where('role', UserRole::Dentist)->orderBy('name')->get(),
             'tab' => $tab,
             'q' => $q,
+            'status' => $status,
+            'tabStatuses' => self::TABS[$tab],
             'counts' => [
                 'active' => $countBase(self::TABS['active']),
                 'billed' => $countBase(self::TABS['billed']),
@@ -92,10 +98,46 @@ class AppointmentController extends Controller
         $duration = max(15, (int) $selected->sum('duration_minutes'));
 
         $dentist = $request->filled('dentist_id') ? $dentists->firstWhere('id', $request->integer('dentist_id')) : null;
-        $date = $request->filled('date') ? Carbon::parse($request->date('date')) : Carbon::today();
 
-        // Available time tiles for the chosen dentist/date — same UX as patient booking.
-        $slots = ($dentist && $selected->isNotEmpty()) ? $scheduler->daySlots($dentist, $duration, $date) : null;
+        // Selected existing patient — autofills + locks the name/phone fields.
+        $selectedPatient = $request->filled('patient_id') ? Patient::find($request->integer('patient_id')) : null;
+
+        // Every htmx swap (service/dentist/date change) re-renders this WHOLE form, so
+        // read walk-in + the new-patient fields from the request (not old(), which is
+        // only populated after a failed POST redirect) to keep them from resetting.
+        $isWalkIn = $request->boolean('is_walk_in');
+        $newFirstName = $request->string('new_first_name')->toString();
+        $newLastName = $request->string('new_last_name')->toString();
+        $newPhone = $request->string('new_phone')->toString();
+
+        // Calendar month + explicitly picked date (today → +3 months). Walk-ins default
+        // to today so the desk immediately sees what's still free.
+        $date = $request->filled('date') ? Carbon::parse($request->date('date')) : Carbon::today();
+        if ($date->isBefore(today()) || $date->gt(now()->addMonths(PredictiveScheduler::MAX_MONTHS_AHEAD))) {
+            $date = Carbon::today();
+        }
+        $calMonth = $request->filled('cal') ? Carbon::parse($request->string('cal').'-01') : $date->copy();
+        $calMonth = $calMonth->startOfMonth();
+        $calMonth = max($calMonth, now()->startOfMonth());
+        $calMonth = min($calMonth, now()->copy()->addMonths(PredictiveScheduler::MAX_MONTHS_AHEAD)->startOfMonth());
+
+        $ready = $dentist && $selected->isNotEmpty();
+        $monthDays = $ready ? $scheduler->monthOverview($dentist, $calMonth, $duration) : null;
+        $slots = $ready ? $scheduler->daySlots($dentist, $duration, $date) : null;
+
+        // Next free slot (today onwards) — handy when today is fully booked and the
+        // desk needs a date to recommend to a walk-in.
+        $nextFree = $ready ? $scheduler->suggestSlots($dentist, $duration, now(), 1)->first() : null;
+
+        // Follow-up targets for the chosen patient (charges consolidate on one bill).
+        $followTargets = collect();
+        if ($request->filled('patient_id')) {
+            $followTargets = Appointment::where('patient_id', $request->integer('patient_id'))
+                ->whereIn('status', [AppointmentStatus::Billed->value, AppointmentStatus::Completed->value])
+                ->where('scheduled_at', '>=', now()->subMonths(6))
+                ->with(['procedures', 'payments'])
+                ->latest('scheduled_at')->take(10)->get();
+        }
 
         return view('clinic.appointments.create', [
             'patients' => Patient::orderBy('last_name')->get(),
@@ -106,7 +148,16 @@ class AppointmentController extends Controller
             'duration' => $duration,
             'dentist' => $dentist,
             'date' => $date,
+            'calMonth' => $calMonth,
+            'monthDays' => $monthDays,
             'slots' => $slots,
+            'nextFree' => $nextFree,
+            'followTargets' => $followTargets,
+            'selectedPatient' => $selectedPatient,
+            'isWalkIn' => $isWalkIn,
+            'newFirstName' => $newFirstName,
+            'newLastName' => $newLastName,
+            'newPhone' => $newPhone,
             'prefill' => $request->only('patient_id'),
         ]);
     }
@@ -116,8 +167,8 @@ class AppointmentController extends Controller
         $services = Service::active()->whereIn('id', $request->validated('service_ids'))->get();
         $dentist = User::findOrFail($request->integer('dentist_id'));
         $isWalkIn = $request->boolean('is_walk_in');
-        // Walk-ins happen "now"; scheduled bookings use the chosen time slot.
-        $start = $isWalkIn ? now() : Carbon::parse($request->date('scheduled_at'));
+        // Everyone (walk-ins included) books into a real free slot to avoid conflicts.
+        $start = Carbon::parse($request->date('scheduled_at'));
         $duration = max(15, (int) $services->sum('duration_minutes'));
 
         // Regular bookings must honour clinic hours; walk-ins are immediate.
@@ -137,9 +188,16 @@ class AppointmentController extends Controller
                 'phone' => $request->input('new_phone'),
             ]);
 
+        // Optional follow-up link — must belong to the same patient.
+        $parentId = $request->integer('parent_appointment_id') ?: null;
+        if ($parentId && ! Appointment::where('patient_id', $patient->id)->whereKey($parentId)->exists()) {
+            $parentId = null;
+        }
+
         $appointment = $patient->appointments()->create([
             'dentist_id' => $dentist->id,
             'service_id' => $services->first()->id, // primary service (back-compat)
+            'parent_appointment_id' => $parentId,
             'scheduled_at' => $start,
             'duration_minutes' => $duration,
             'total_amount' => round((float) $services->sum('price'), 2),
@@ -175,7 +233,7 @@ class AppointmentController extends Controller
     {
         $this->authorize('view', $appointment);
 
-        $appointment->load(['patient.user', 'dentist', 'service', 'payments.recorder', 'creator', 'canceller', 'procedures.service', 'procedures.performer', 'billingStatement.items', 'recommendations.service']);
+        $appointment->load(['patient.user', 'dentist', 'service', 'payments.recorder', 'creator', 'canceller', 'procedures.service', 'procedures.performer', 'billingStatement.items', 'recommendations.service', 'parent.billingStatement', 'followUps']);
 
         $patientUser = $appointment->patient?->user;
 
@@ -233,6 +291,36 @@ class AppointmentController extends Controller
         return back()->with('status', 'Appointment marked as no-show.');
     }
 
+    /**
+     * Calendar + time-slot picker for changing an appointment's date/time — same UX as
+     * booking, loaded lazily (htmx) into the appointment page.
+     */
+    public function rescheduleForm(Request $request, Appointment $appointment, PredictiveScheduler $scheduler): View
+    {
+        $this->authorize('reschedule', $appointment);
+        $appointment->load('dentist');
+
+        $date = $request->filled('date') ? Carbon::parse($request->date('date')) : $appointment->scheduled_at->copy()->max(Carbon::today());
+        if ($date->isBefore(today()) || $date->gt(now()->addMonths(PredictiveScheduler::MAX_MONTHS_AHEAD))) {
+            $date = Carbon::today();
+        }
+        $calMonth = $request->filled('cal') ? Carbon::parse($request->string('cal').'-01') : $date->copy();
+        $calMonth = $calMonth->startOfMonth();
+        $calMonth = max($calMonth, now()->startOfMonth());
+        $calMonth = min($calMonth, now()->copy()->addMonths(PredictiveScheduler::MAX_MONTHS_AHEAD)->startOfMonth());
+
+        $duration = max(15, (int) $appointment->duration_minutes);
+
+        return view('clinic.appointments._reschedule', [
+            'appointment' => $appointment,
+            'duration' => $duration,
+            'date' => $date,
+            'calMonth' => $calMonth,
+            'monthDays' => $scheduler->monthOverview($appointment->dentist, $calMonth, $duration, $appointment->id),
+            'slots' => $scheduler->daySlots($appointment->dentist, $duration, $date, $appointment->id),
+        ]);
+    }
+
     public function reschedule(Request $request, Appointment $appointment, PredictiveScheduler $scheduler): RedirectResponse
     {
         $this->authorize('reschedule', $appointment);
@@ -254,18 +342,16 @@ class AppointmentController extends Controller
 
     private function slotProblem(Carbon $start, int $duration): ?string
     {
-        if ($start->isPast()) {
+        // Small grace period so a walk-in slot picked moments ago still validates.
+        if ($start->lt(now()->subMinutes(15))) {
             return 'Please choose a future date and time.';
         }
-        if (! in_array($start->isoWeekday(), config('clinic.open_days'), true)) {
-            return 'The clinic is closed on that day.';
-        }
-        $open = $start->copy()->setTimeFromTimeString(config('clinic.open_time'));
-        $close = $start->copy()->setTimeFromTimeString(config('clinic.close_time'));
-        if ($start->lt($open) || $start->copy()->addMinutes($duration)->gt($close)) {
-            return 'Please choose a time within clinic hours ('.config('clinic.open_time').'–'.config('clinic.close_time').').';
+        if ($start->gt(now()->addMonths(PredictiveScheduler::MAX_MONTHS_AHEAD))) {
+            return 'Bookings can be made up to 3 months in advance.';
         }
 
+        // Dentist-specific hours (weekly rules + date blocks) are enforced by
+        // PredictiveScheduler::isSlotAvailable in store().
         return null;
     }
 }

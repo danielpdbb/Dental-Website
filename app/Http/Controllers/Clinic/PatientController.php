@@ -36,13 +36,24 @@ class PatientController extends Controller
                     ? $query->whereNull('user_id')
                     : $query->whereNotNull('user_id');
             })
+            // Balance filter: a patient "has a balance" when any billed visit is still
+            // owed more than what's been collected (correlated subquery — scales fine).
+            ->when($request->string('balance')->value(), function ($query, $balance) {
+                $owedClause = fn ($q) => $q
+                    ->where('appointments.status', \App\Enums\AppointmentStatus::Billed->value)
+                    ->whereRaw('appointments.total_amount > (select coalesce(sum(p.amount), 0) from payments p where p.appointment_id = appointments.id and p.status = ?)', [\App\Enums\PaymentStatus::Paid->value]);
+
+                $balance === 'with'
+                    ? $query->whereHas('appointments', $owedClause)
+                    : $query->whereDoesntHave('appointments', $owedClause);
+            })
             ->orderBy('last_name')
             ->paginate(15)
             ->withQueryString();
 
         return view('clinic.patients.index', [
             'patients' => $patients,
-            'filters' => $request->only('search', 'account'),
+            'filters' => $request->only('search', 'account', 'balance'),
         ]);
     }
 
@@ -66,7 +77,7 @@ class PatientController extends Controller
     {
         $this->authorize('view', $patient);
 
-        $patient->load(['user', 'allergies', 'appointments.payments']);
+        $patient->load(['user', 'allergies', 'appointments.payments', 'appointments.procedures', 'appointments.billingStatement']);
 
         // Paginated, filterable appointment list (the full set can get long).
         $apptStatus = $request->string('appt_status')->toString() ?: null;

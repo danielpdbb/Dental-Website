@@ -12,7 +12,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 
 #[Fillable([
-    'patient_id', 'dentist_id', 'service_id', 'scheduled_at', 'duration_minutes',
+    'patient_id', 'dentist_id', 'service_id', 'parent_appointment_id', 'scheduled_at', 'duration_minutes',
     'total_amount', 'status', 'is_walk_in', 'notes', 'created_by', 'cancelled_by',
     'cancelled_at', 'cancellation_reason',
     'endorsed_at', 'endorsed_by', 'billed_at', 'billed_by',
@@ -87,6 +87,18 @@ class Appointment extends Model
     public function billingStatement(): HasOne
     {
         return $this->hasOne(BillingStatement::class);
+    }
+
+    /** The original visit this one follows up (e.g. a braces adjustment). */
+    public function parent(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'parent_appointment_id');
+    }
+
+    /** Follow-up visits consolidated under this appointment's billing statement. */
+    public function followUps(): HasMany
+    {
+        return $this->hasMany(self::class, 'parent_appointment_id');
     }
 
     /** Stage-1 pre-appointment assessment (patient/reception filled). */

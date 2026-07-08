@@ -186,6 +186,7 @@ Route::middleware(['auth', 'verified', 'role:patient'])->prefix('portal')->name(
 
     Route::get('/referrals', [PortalReferralController::class, 'index'])->name('referrals.index');
     Route::post('/referrals', [PortalReferralController::class, 'store'])->name('referrals.store');
+    Route::get('/referrals/{referral}/letter', [PortalReferralController::class, 'letter'])->name('referrals.letter');
 
     // Refer a friend — rewards hub
     Route::get('/rewards', [PortalRewardController::class, 'index'])->name('rewards.index');
@@ -215,6 +216,14 @@ Route::middleware(['auth', 'role:receptionist,dentist,management'])->prefix('cli
     // Dentist's daily schedule (dentists see their own; managers/reception can pick)
     Route::get('my-schedule', [DentistScheduleController::class, 'index'])->name('my-schedule');
 
+    // Customisable working hours & date blocks — dentist (own) + management (any)
+    Route::middleware('role:dentist,management')->group(function () {
+        Route::get('availability', [\App\Http\Controllers\Clinic\AvailabilityController::class, 'index'])->name('availability');
+        Route::post('availability/weekly', [\App\Http\Controllers\Clinic\AvailabilityController::class, 'saveWeekly'])->name('availability.weekly');
+        Route::post('availability/override', [\App\Http\Controllers\Clinic\AvailabilityController::class, 'addOverride'])->name('availability.override');
+        Route::delete('availability/override/{schedule}', [\App\Http\Controllers\Clinic\AvailabilityController::class, 'removeOverride'])->name('availability.override.remove');
+    });
+
     // Current-treatment workspace — dentist (own appts) + management
     Route::get('appointments/{appointment}/treatment', [CurrentTreatmentController::class, 'edit'])->name('appointments.treatment');
     Route::post('appointments/{appointment}/treatment/procedures', [CurrentTreatmentController::class, 'addProcedure'])->name('appointments.treatment.add');
@@ -242,6 +251,7 @@ Route::middleware(['auth', 'role:receptionist,dentist,management'])->prefix('cli
         Route::post('appointments/{appointment}/cancel', [ClinicAppointmentController::class, 'cancel'])->name('appointments.cancel');
         Route::post('appointments/{appointment}/complete', [ClinicAppointmentController::class, 'complete'])->name('appointments.complete');
         Route::post('appointments/{appointment}/no-show', [ClinicAppointmentController::class, 'noShow'])->name('appointments.no-show');
+        Route::get('appointments/{appointment}/reschedule', [ClinicAppointmentController::class, 'rescheduleForm'])->name('appointments.reschedule.form');
         Route::put('appointments/{appointment}/reschedule', [ClinicAppointmentController::class, 'reschedule'])->name('appointments.reschedule');
         Route::post('appointments/{appointment}/payment', [PaymentController::class, 'store'])->name('appointments.payment.store');
         Route::post('appointments/{appointment}/redeem-rewards', [PaymentController::class, 'redeemRewards'])->name('appointments.redeem-rewards');
@@ -259,6 +269,8 @@ Route::middleware(['auth', 'role:receptionist,dentist,management'])->prefix('cli
 
         Route::get('referrals', [ClinicReferralController::class, 'index'])->name('referrals.index');
         Route::patch('referrals/{referral}', [ClinicReferralController::class, 'update'])->name('referrals.update');
+        Route::post('referrals/{referral}/letter', [ClinicReferralController::class, 'saveLetter'])->name('referrals.letter');
+        Route::get('referrals/{referral}/letter', [ClinicReferralController::class, 'printLetter'])->name('referrals.letter.print');
 
         Route::get('scheduling', [SchedulingController::class, 'index'])->name('scheduling');
     });

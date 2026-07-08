@@ -14,14 +14,39 @@ class RegisterRequest extends FormRequest
     }
 
     /**
-     * Normalize input before validation (case-insensitive email/username uniqueness).
+     * Normalize input before validation (case-insensitive email/username uniqueness),
+     * compose the birthday from its Month/Day/Year dropdowns, and the address from
+     * its PH-style parts (street / barangay / city / province / ZIP).
      */
     protected function prepareForValidation(): void
     {
-        $this->merge([
+        $merge = [
             'email' => is_string($this->email) ? strtolower(trim($this->email)) : $this->email,
             'username' => is_string($this->username) ? trim($this->username) : $this->username,
+        ];
+
+        if ($this->filled(['dob_year', 'dob_month', 'dob_day'])) {
+            $y = (int) $this->dob_year;
+            $m = (int) $this->dob_month;
+            $d = (int) $this->dob_day;
+            // Only compose when it's a REAL calendar date (rejects e.g. Feb 30).
+            $merge['date_of_birth'] = checkdate($m, $d, $y)
+                ? sprintf('%04d-%02d-%02d', $y, $m, $d)
+                : null;
+        }
+
+        $parts = array_filter([
+            trim((string) $this->address_street),
+            $this->filled('address_barangay') ? 'Brgy. '.trim((string) $this->address_barangay) : null,
+            trim((string) $this->address_city),
+            trim((string) $this->address_province),
+            trim((string) $this->address_zip),
         ]);
+        if ($parts !== []) {
+            $merge['address'] = implode(', ', $parts);
+        }
+
+        $this->merge($merge);
     }
 
     /**
@@ -37,7 +62,18 @@ class RegisterRequest extends FormRequest
             'email' => ['required', 'string', 'email', 'max:255', Rule::unique('users', 'email')->whereNull('deleted_at')],
             'mobile' => \App\Support\Phone::rules(required: true),
             'gender' => ['required', Rule::in(['Male', 'Female', 'Other', 'Prefer not to say'])],
-            'date_of_birth' => ['required', 'date', 'before:today'],
+            // Composed from the Month/Day/Year dropdowns. No future dates, and patients
+            // must be at least 9 years old to hold their own portal account.
+            'dob_month' => ['required', 'integer', 'between:1,12'],
+            'dob_day' => ['required', 'integer', 'between:1,31'],
+            'dob_year' => ['required', 'integer', 'between:'.(now()->year - 120).','.now()->year],
+            'date_of_birth' => ['required', 'date', 'before:today', 'before_or_equal:'.now()->subYears(9)->toDateString()],
+            // PH-style address parts (composed into one address string).
+            'address_street' => ['required', 'string', 'max:255'],
+            'address_barangay' => ['required', 'string', 'max:120'],
+            'address_city' => ['required', 'string', 'max:120'],
+            'address_province' => ['required', 'string', 'max:120'],
+            'address_zip' => ['nullable', 'string', 'max:10'],
             'address' => ['required', 'string', 'max:500'],
             'password' => ['required', 'confirmed', Password::defaults()],
             // Optional "refer a friend" code — validated leniently; an unknown
@@ -53,6 +89,13 @@ class RegisterRequest extends FormRequest
         return [
             'username.alpha_dash' => 'The username may only contain letters, numbers, dashes and underscores.',
             'mobile.regex' => \App\Support\Phone::message(),
+            'date_of_birth.required' => 'Please pick a valid birthday (that day doesn\'t exist in that month).',
+            'date_of_birth.before' => 'Your birthday can\'t be in the future.',
+            'date_of_birth.before_or_equal' => 'You must be at least 9 years old to create an account. A parent or guardian can book for younger children at the clinic.',
+            'address_street.required' => 'Please enter your house/unit number and street.',
+            'address_barangay.required' => 'Please enter your barangay.',
+            'address_city.required' => 'Please enter your city or municipality.',
+            'address_province.required' => 'Please enter your province.',
             'email.unique' => 'An account with this email already exists.',
             'username.unique' => 'This username is already taken.',
             'consent.accepted' => 'You must agree to the data privacy consent to create an account.',

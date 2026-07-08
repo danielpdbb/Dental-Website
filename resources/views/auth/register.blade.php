@@ -57,17 +57,67 @@
                     </div>
 
                     <div>
-                        <label for="date_of_birth" class="block text-sm font-medium text-slate-700 mb-1">Date of birth</label>
-                        <input id="date_of_birth" type="date" name="date_of_birth" value="{{ old('date_of_birth') }}" required max="{{ now()->toDateString() }}"
-                            class="w-full h-11 px-4 rounded-xl border @error('date_of_birth') border-red-400 @else border-slate-200 @enderror focus:border-brand-blue outline-none transition" />
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Birthday</label>
+                        @php
+                            $months = [1 => 'January', 2 => 'February', 3 => 'March', 4 => 'April', 5 => 'May', 6 => 'June',
+                                7 => 'July', 8 => 'August', 9 => 'September', 10 => 'October', 11 => 'November', 12 => 'December'];
+                            $dobErr = $errors->has('date_of_birth') || $errors->has('dob_month') || $errors->has('dob_day') || $errors->has('dob_year');
+                        @endphp
+                        <div class="grid grid-cols-3 gap-1.5 sm:gap-2">
+                            <select name="dob_month" required aria-label="Birth month"
+                                class="h-11 px-3 rounded-xl border {{ $dobErr ? 'border-red-400' : 'border-slate-200' }} focus:border-brand-blue outline-none transition">
+                                <option value="">Month</option>
+                                @foreach ($months as $mNum => $mName)
+                                    <option value="{{ $mNum }}" @selected((string) old('dob_month') === (string) $mNum)>{{ $mName }}</option>
+                                @endforeach
+                            </select>
+                            <select name="dob_day" required aria-label="Birth day"
+                                class="h-11 px-3 rounded-xl border {{ $dobErr ? 'border-red-400' : 'border-slate-200' }} focus:border-brand-blue outline-none transition">
+                                <option value="">Day</option>
+                                @foreach (range(1, 31) as $d)
+                                    <option value="{{ $d }}" @selected((string) old('dob_day') === (string) $d)>{{ $d }}</option>
+                                @endforeach
+                            </select>
+                            <select name="dob_year" required aria-label="Birth year"
+                                class="h-11 px-3 rounded-xl border {{ $dobErr ? 'border-red-400' : 'border-slate-200' }} focus:border-brand-blue outline-none transition">
+                                <option value="">Year</option>
+                                @foreach (range(now()->year - 9, now()->year - 100) as $y)
+                                    <option value="{{ $y }}" @selected((string) old('dob_year') === (string) $y)>{{ $y }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+                        <p class="mt-1 text-xs text-slate-400">You must be at least 9 years old — a parent or guardian can book for younger children.</p>
                         @error('date_of_birth') <p class="mt-1 text-xs text-red-500">{{ $message }}</p> @enderror
                     </div>
 
                     <div>
-                        <label for="address" class="block text-sm font-medium text-slate-700 mb-1">Address</label>
-                        <textarea id="address" name="address" rows="2" required
-                            class="w-full px-4 py-2 rounded-xl border @error('address') border-red-400 @else border-slate-200 @enderror focus:border-brand-blue outline-none transition">{{ old('address') }}</textarea>
-                        @error('address') <p class="mt-1 text-xs text-red-500">{{ $message }}</p> @enderror
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Address</label>
+                        <div class="space-y-3">
+                            <input type="text" name="address_street" value="{{ old('address_street') }}" required placeholder="House / unit no. & street (e.g. 123 Rizal St.)"
+                                class="w-full h-11 px-4 rounded-xl border @error('address_street') border-red-400 @else border-slate-200 @enderror focus:border-brand-blue outline-none transition" />
+                            @error('address_street') <p class="-mt-2 text-xs text-red-500">{{ $message }}</p> @enderror
+                            <div class="grid sm:grid-cols-2 gap-3">
+                                <div>
+                                    <input type="text" name="address_barangay" value="{{ old('address_barangay') }}" required placeholder="Barangay"
+                                        class="w-full h-11 px-4 rounded-xl border @error('address_barangay') border-red-400 @else border-slate-200 @enderror focus:border-brand-blue outline-none transition" />
+                                    @error('address_barangay') <p class="mt-1 text-xs text-red-500">{{ $message }}</p> @enderror
+                                </div>
+                                <div>
+                                    <input type="text" name="address_city" value="{{ old('address_city') }}" required placeholder="City / Municipality"
+                                        class="w-full h-11 px-4 rounded-xl border @error('address_city') border-red-400 @else border-slate-200 @enderror focus:border-brand-blue outline-none transition" />
+                                    @error('address_city') <p class="mt-1 text-xs text-red-500">{{ $message }}</p> @enderror
+                                </div>
+                            </div>
+                            <div class="grid sm:grid-cols-2 gap-3">
+                                <div>
+                                    <input type="text" name="address_province" value="{{ old('address_province', 'Pangasinan') }}" required placeholder="Province"
+                                        class="w-full h-11 px-4 rounded-xl border @error('address_province') border-red-400 @else border-slate-200 @enderror focus:border-brand-blue outline-none transition" />
+                                    @error('address_province') <p class="mt-1 text-xs text-red-500">{{ $message }}</p> @enderror
+                                </div>
+                                <input type="text" name="address_zip" value="{{ old('address_zip') }}" placeholder="ZIP code (optional)"
+                                    class="w-full h-11 px-4 rounded-xl border border-slate-200 focus:border-brand-blue outline-none transition" />
+                            </div>
+                        </div>
                     </div>
 
                     <div class="grid sm:grid-cols-2 gap-4">

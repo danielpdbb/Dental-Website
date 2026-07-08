@@ -32,6 +32,36 @@ class SchedulingController extends Controller
         // their own history (walk-in / no selection = generic baseline).
         $patient = $request->filled('patient_id') ? Patient::find($request->integer('patient_id')) : null;
         $fromDate = $request->filled('date') ? Carbon::parse($request->date('date')) : now();
+        if ($fromDate->isBefore(today()) || $fromDate->gt(now()->addMonths(PredictiveScheduler::MAX_MONTHS_AHEAD))) {
+            $fromDate = now();
+        }
+
+        // Calendar month for the date picker (same UX as booking).
+        $calMonth = $request->filled('cal') ? Carbon::parse($request->string('cal').'-01') : $fromDate->copy();
+        $calMonth = $calMonth->startOfMonth();
+        $calMonth = max($calMonth, now()->startOfMonth());
+        $calMonth = min($calMonth, now()->copy()->addMonths(PredictiveScheduler::MAX_MONTHS_AHEAD)->startOfMonth());
+
+        $monthDays = ($dentist && $service)
+            ? $scheduler->monthOverview($dentist, $calMonth, $service->duration_minutes)
+            : null;
+
+        // The picked day's FULL grid: taken/past slots greyed out, free slots scored
+        // by the Decision Tree — so the desk sees unavailable vs available at a glance.
+        $daySlots = ($dentist && $service)
+            ? $scheduler->daySlots($dentist, $service->duration_minutes, $fromDate->copy()->startOfDay())
+                ->map(function (array $slot) use ($model, $extractor, $service, $patient) {
+                    $keep = $slot['status'] === 'free'
+                        ? $model->keepProbability($extractor->slotVector($patient, $slot['time'], $service->duration_minutes, (float) $service->price))
+                        : null;
+
+                    return $slot + [
+                        'keep' => $keep,
+                        'noShow' => $keep !== null ? (int) round((1 - $keep) * 100) : null,
+                        'risk' => $keep !== null ? $model->riskBadge($keep) : null,
+                    ];
+                })
+            : collect();
 
         $suggestedAction = null;
 
@@ -85,6 +115,10 @@ class SchedulingController extends Controller
             'services' => Service::active()->orderBy('name')->get(),
             'patients' => Patient::orderBy('last_name')->get(['id', 'first_name', 'last_name']),
             'suggestions' => $suggestions,
+            'calMonth' => $calMonth,
+            'monthDays' => $monthDays,
+            'daySlots' => $daySlots,
+            'fromDate' => $fromDate,
             'modelTrained' => $model->isTrained(),
             'suggestedAction' => $suggestedAction,
             'patientContext' => $patientContext,

@@ -15,6 +15,20 @@
 @section('content')
     <a href="{{ route('clinic.my-schedule') }}" class="text-sm text-slate-500 hover:text-brand-blue">← Back to my schedule</a>
 
+    {{-- Follow-up linkage — dentists have no other page that shows this, so it must be here. --}}
+    @if ($appointment->parent)
+        <div class="mt-3 rounded-xl border border-brand-blue/30 bg-brand-blue/5 px-4 py-3 text-sm text-slate-700">
+            This is a <strong>follow-up</strong> of the {{ $appointment->parent->scheduled_at->format('M j, Y') }} visit
+            — any procedures added here bill onto that same statement{{ $appointment->parent->billingStatement ? ' ('.$appointment->parent->billingStatement->statement_no.')' : '' }}.
+        </div>
+    @endif
+    @if ($appointment->followUps->isNotEmpty())
+        <div class="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+            <span class="font-medium">Follow-up visits on this bill:</span>
+            {{ $appointment->followUps->map(fn ($fu) => $fu->scheduled_at->format('M j'))->join(', ') }}
+        </div>
+    @endif
+
     <div class="mt-4 grid lg:grid-cols-3 gap-6">
         <div class="lg:col-span-2 space-y-6">
             {{-- Session header --}}

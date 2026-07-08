@@ -36,4 +36,17 @@ class ReferralController extends Controller
         return redirect()->route('portal.referrals.index')
             ->with('status', 'Referral request submitted.');
     }
+
+    /** The patient's own issued referral letter (PDF). */
+    public function letter(Request $request, \App\Models\Referral $referral)
+    {
+        $patient = RecordController::resolvePatient($request->user());
+        abort_unless($referral->patient_id === $patient->id, 403);
+        abort_unless($referral->hasLetter(), 404, 'This referral letter has not been issued yet.');
+
+        $referral->load(['patient', 'service', 'letterIssuer']);
+
+        return \Barryvdh\DomPDF\Facade\Pdf::loadView('clinic.referrals.letter', ['referral' => $referral])
+            ->stream($referral->letter_no.'.pdf');
+    }
 }
