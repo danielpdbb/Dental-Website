@@ -63,23 +63,23 @@
                                 7 => 'July', 8 => 'August', 9 => 'September', 10 => 'October', 11 => 'November', 12 => 'December'];
                             $dobErr = $errors->has('date_of_birth') || $errors->has('dob_month') || $errors->has('dob_day') || $errors->has('dob_year');
                         @endphp
-                        <div class="grid grid-cols-3 gap-1.5 sm:gap-2">
+                        <div class="grid grid-cols-[1.4fr_1fr_1.1fr] gap-2">
                             <select name="dob_month" required aria-label="Birth month"
-                                class="h-11 px-3 rounded-xl border {{ $dobErr ? 'border-red-400' : 'border-slate-200' }} focus:border-brand-blue outline-none transition">
+                                class="w-full h-11 px-3 rounded-xl border {{ $dobErr ? 'border-red-400' : 'border-slate-200' }} focus:border-brand-blue focus:ring-2 focus:ring-brand-blue/20 outline-none transition">
                                 <option value="">Month</option>
                                 @foreach ($months as $mNum => $mName)
                                     <option value="{{ $mNum }}" @selected((string) old('dob_month') === (string) $mNum)>{{ $mName }}</option>
                                 @endforeach
                             </select>
                             <select name="dob_day" required aria-label="Birth day"
-                                class="h-11 px-3 rounded-xl border {{ $dobErr ? 'border-red-400' : 'border-slate-200' }} focus:border-brand-blue outline-none transition">
+                                class="w-full h-11 px-3 rounded-xl border {{ $dobErr ? 'border-red-400' : 'border-slate-200' }} focus:border-brand-blue focus:ring-2 focus:ring-brand-blue/20 outline-none transition">
                                 <option value="">Day</option>
                                 @foreach (range(1, 31) as $d)
                                     <option value="{{ $d }}" @selected((string) old('dob_day') === (string) $d)>{{ $d }}</option>
                                 @endforeach
                             </select>
                             <select name="dob_year" required aria-label="Birth year"
-                                class="h-11 px-3 rounded-xl border {{ $dobErr ? 'border-red-400' : 'border-slate-200' }} focus:border-brand-blue outline-none transition">
+                                class="w-full h-11 px-3 rounded-xl border {{ $dobErr ? 'border-red-400' : 'border-slate-200' }} focus:border-brand-blue focus:ring-2 focus:ring-brand-blue/20 outline-none transition">
                                 <option value="">Year</option>
                                 @foreach (range(now()->year - 9, now()->year - 100) as $y)
                                     <option value="{{ $y }}" @selected((string) old('dob_year') === (string) $y)>{{ $y }}</option>

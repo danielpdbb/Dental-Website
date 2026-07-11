@@ -32,6 +32,53 @@
             </form>
         @endif
 
+        @if ($canPick)
+            {{-- Store-wide hours — management only. Dentist rules below still override per person. --}}
+            <div class="rounded-2xl bg-white border border-slate-200/60 p-6 shadow-soft">
+                <h2 class="font-display text-lg font-bold">Clinic hours <span class="text-slate-400 font-normal text-sm">(store-wide)</span></h2>
+                <p class="text-xs text-slate-400 mt-0.5 mb-4">The default opening days and hours for the whole clinic. Every booking calendar, time grid and validation follows this — individual dentists can still set their own hours or days off below.</p>
+
+                <form method="POST" action="{{ route('clinic.availability.clinic-hours') }}" class="space-y-4">
+                    @csrf
+                    <div>
+                        <label class="block text-xs font-medium text-slate-500 mb-2">Open days</label>
+                        <div class="flex flex-wrap gap-2">
+                            @foreach ($dayNames as $wd => $name)
+                                <label class="cursor-pointer">
+                                    <input type="checkbox" name="open_days[]" value="{{ $wd }}" @checked(in_array($wd, $clinicOpenDays, true)) class="peer sr-only" />
+                                    <span class="inline-flex h-9 px-3.5 items-center rounded-lg border border-slate-200 text-sm font-medium text-slate-500 transition peer-checked:border-brand-blue peer-checked:bg-brand-blue/10 peer-checked:text-brand-blue">{{ substr($name, 0, 3) }}</span>
+                                </label>
+                            @endforeach
+                        </div>
+                        @error('open_days')<p class="mt-1 text-xs text-red-500">{{ $message }}</p>@enderror
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-3 max-w-sm">
+                        <div>
+                            <label class="block text-xs font-medium text-slate-500 mb-1">Opens</label>
+                            <select name="open_time" class="w-full h-10 px-3 rounded-lg border border-slate-200 bg-white text-sm outline-none focus:border-brand-blue">
+                                @foreach ($timeOptions as $value => $label)
+                                    <option value="{{ $value }}" @selected(config('clinic.open_time') === $value)>{{ $label }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-slate-500 mb-1">Closes</label>
+                            <select name="close_time" class="w-full h-10 px-3 rounded-lg border border-slate-200 bg-white text-sm outline-none focus:border-brand-blue">
+                                @foreach ($timeOptions as $value => $label)
+                                    <option value="{{ $value }}" @selected(config('clinic.close_time') === $value)>{{ $label }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+                    </div>
+                    @error('close_time')<p class="-mt-2 text-xs text-red-500">{{ $message }}</p>@enderror
+
+                    <button class="h-10 px-5 rounded-lg gradient-brand text-white text-sm font-semibold shadow-brand hover:opacity-90">Save clinic hours</button>
+                    <p class="text-[11px] text-slate-400">Changes apply immediately to new bookings; existing appointments are not moved.</p>
+                </form>
+            </div>
+        @endif
+
         {{-- Specific dates FIRST — the calendar makes one-off blocks/overrides fast to spot and add --}}
         <div class="rounded-2xl bg-white border border-slate-200/60 p-6 shadow-soft">
             <h2 class="font-display text-lg font-bold">Specific dates</h2>
