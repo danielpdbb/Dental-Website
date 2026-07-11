@@ -39,6 +39,32 @@ class AvailabilityController extends Controller
         ]);
     }
 
+    /**
+     * Store-wide opening days & hours (management only). Saved to clinic_settings and
+     * overlaid onto config('clinic.*') at boot, so every calendar, slot grid and
+     * validation follows. Per-dentist weekly rules / date blocks still take precedence.
+     */
+    public function saveClinicHours(Request $request): RedirectResponse
+    {
+        abort_unless($request->user()->role === UserRole::Management, 403);
+
+        $data = $request->validate([
+            'open_days' => ['required', 'array', 'min:1'],
+            'open_days.*' => ['integer', 'between:1,7'],
+            'open_time' => ['required', 'date_format:H:i'],
+            'close_time' => ['required', 'date_format:H:i', 'after:open_time'],
+        ], [
+            'open_days.required' => 'Pick at least one open day.',
+            'close_time.after' => 'Closing time must be after opening time.',
+        ]);
+
+        \App\Models\ClinicSetting::set('open_days', array_values(array_map('intval', $data['open_days'])));
+        \App\Models\ClinicSetting::set('open_time', $data['open_time']);
+        \App\Models\ClinicSetting::set('close_time', $data['close_time']);
+
+        return back()->with('status', 'Clinic hours updated — all booking calendars now follow the new schedule.');
+    }
+
     /** Save the weekly template (one row per weekday; absent = clinic default). */
     public function saveWeekly(Request $request): RedirectResponse
     {

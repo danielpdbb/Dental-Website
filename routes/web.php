@@ -219,6 +219,7 @@ Route::middleware(['auth', 'role:receptionist,dentist,management'])->prefix('cli
     // Customisable working hours & date blocks — dentist (own) + management (any)
     Route::middleware('role:dentist,management')->group(function () {
         Route::get('availability', [\App\Http\Controllers\Clinic\AvailabilityController::class, 'index'])->name('availability');
+        Route::post('availability/clinic-hours', [\App\Http\Controllers\Clinic\AvailabilityController::class, 'saveClinicHours'])->name('availability.clinic-hours');
         Route::post('availability/weekly', [\App\Http\Controllers\Clinic\AvailabilityController::class, 'saveWeekly'])->name('availability.weekly');
         Route::post('availability/override', [\App\Http\Controllers\Clinic\AvailabilityController::class, 'addOverride'])->name('availability.override');
         Route::delete('availability/override/{schedule}', [\App\Http\Controllers\Clinic\AvailabilityController::class, 'removeOverride'])->name('availability.override.remove');
